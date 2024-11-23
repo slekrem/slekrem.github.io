@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Goldankaufspreis Rechner</title>
+    <!-- Bootstrap CSS einbinden -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+</head>
+
+<body>
+
+    <div class="container mt-5">
+        <h1 class="text-center">Goldankaufspreis Rechner</h1>
+
+        <!-- Goldpreis anzeigen -->
+        <div class="form-group">
+            <label for="goldPrice">Aktueller Goldpreis pro Gramm (€)</label>
+            <input type="text" class="form-control" id="goldPrice" readonly>
+        </div>
+
+        <!-- Tabelle für Artikel -->
+        <table class="table table-bordered" id="itemsTable">
+            <thead>
+                <tr>
+                    <th>Gewicht (g)</th>
+                    <th>Reinheit</th>
+                    <th>Kommission (%)</th>
+                    <th>Ankaufspreis (€)</th>
+                    <th>Aktion</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Dynamische Zeilen werden hier eingefügt -->
+            </tbody>
+        </table>
+
+        <!-- Schaltfläche zum Hinzufügen von Artikeln -->
+        <button class="btn btn-success" id="addItemBtn">Artikel hinzufügen</button>
+
+        <!-- Gesamtpreis anzeigen -->
+        <div class="mt-4">
+            <h3>Gesamt Ankaufspreis: <span id="totalPrice">0,00 €</span></h3>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS und jQuery einbinden -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- JavaScript für die Berechnung -->
+    <script>
+        // API-Schlüssel (ersetzen Sie 'YOUR_API_KEY' durch Ihren tatsächlichen API-Schlüssel)
+        const apiKey = 'goldapi-15hojrsm3tvwh99-io';
+
+        // Funktion zum Abrufen des aktuellen Goldpreises
+        function fetchGoldPrice() {
+            fetch('https://www.goldapi.io/api/XAU/EUR', {
+                method: 'GET',
+                headers: {
+                    'x-access-token': apiKey,
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Netzwerkantwort war nicht ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.price) {
+                        // Preis in EUR pro Feinunze erhalten
+                        const pricePerOunce = data.price;
+                        // Umrechnung von Feinunze (31,1035 g) zu Gramm
+                        const pricePerGram = pricePerOunce / 31.1035;
+                        // Preis auf zwei Dezimalstellen runden
+                        const roundedPrice = pricePerGram.toFixed(2);
+                        // Preis im Eingabefeld anzeigen
+                        document.getElementById('goldPrice').value = roundedPrice.replace('.', ',') + ' €';
+                        // Preis für Berechnungen speichern
+                        document.getElementById('goldPrice').dataset.price = pricePerGram;
+                    } else {
+                        alert('Fehler beim Abrufen des Goldpreises.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Fehler:', error);
+                    alert('Es gab ein Problem beim Abrufen des Goldpreises.');
+                });
+        }
+
+        // Beim Laden der Seite den Goldpreis abrufen
+        window.onload = function () {
+            fetchGoldPrice();
+        };
+
+        // Funktion zum Hinzufügen einer neuen Artikelzeile
+        function addItemRow() {
+            var tbody = document.getElementById('itemsTable').getElementsByTagName('tbody')[0];
+            var row = tbody.insertRow();
+
+            // Gewicht
+            var cellWeight = row.insertCell(0);
+            var inputWeight = document.createElement('input');
+            inputWeight.type = 'number';
+            inputWeight.className = 'form-control weight';
+            inputWeight.placeholder = 'Gewicht (g)';
+            inputWeight.step = '0.01';
+            cellWeight.appendChild(inputWeight);
+
+            // Reinheit
+            var cellPurity = row.insertCell(1);
+            var selectPurity = document.createElement('select');
+            selectPurity.className = 'form-control purity';
+            var options = [
+                { value: '', text: 'Reinheit wählen' },
+                { value: '0.999', text: '24K - 999' },
+                { value: '0.916', text: '22K - 916' },
+                { value: '0.750', text: '18K - 750' },
+                { value: '0.585', text: '14K - 585' },
+                { value: '0.375', text: '9K - 375' }
+            ];
+            options.forEach(function (optionData) {
+                var option = document.createElement('option');
+                option.value = optionData.value;
+                option.text = optionData.text;
+                selectPurity.appendChild(option);
+            });
+            cellPurity.appendChild(selectPurity);
+
+            // Kommission
+            var cellCommission = row.insertCell(2);
+            var inputCommission = document.createElement('input');
+            inputCommission.type = 'number';
+            inputCommission.className = 'form-control commission';
+            inputCommission.placeholder = 'Kommission (%)';
+            inputCommission.step = '0.01';
+            cellCommission.appendChild(inputCommission);
+
+            // Ankaufspreis
+            var cellPrice = row.insertCell(3);
+            cellPrice.className = 'price';
+            cellPrice.innerText = '0,00 €';
+
+            // Aktion
+            var cellAction = row.insertCell(4);
+            var deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-danger btn-sm';
+            deleteBtn.innerText = 'Entfernen';
+            deleteBtn.onclick = function () {
+                row.remove();
+                calculateTotalPrice();
+            };
+            cellAction.appendChild(deleteBtn);
+
+            // Event Listener für Änderungen in den Eingabefeldern
+            inputWeight.onchange = calculateRowPrice;
+            selectPurity.onchange = calculateRowPrice;
+            inputCommission.onchange = calculateRowPrice;
+        }
+
+        // Funktion zur Berechnung des Ankaufspreises für eine Zeile
+        function calculateRowPrice() {
+            var row = this.parentElement.parentElement;
+            var weight = parseFloat(row.querySelector('.weight').value);
+            var purity = parseFloat(row.querySelector('.purity').value);
+            var commission = parseFloat(row.querySelector('.commission').value) / 100;
+            var goldPrice = parseFloat(document.getElementById('goldPrice').dataset.price);
+
+            // Überprüfen, ob alle Werte gültig sind
+            if (isNaN(weight) || isNaN(purity) || isNaN(commission) || isNaN(goldPrice)) {
+                row.querySelector('.price').innerText = '0,00 €';
+                calculateTotalPrice();
+                return;
+            }
+
+            // Berechnung durchführen
+            var purchasePrice = goldPrice * weight * purity * (1 - commission);
+
+            // Ergebnis anzeigen, auf zwei Dezimalstellen gerundet
+            row.querySelector('.price').innerText = purchasePrice.toFixed(2).replace('.', ',') + ' €';
+
+            // Gesamtpreis neu berechnen
+            calculateTotalPrice();
+        }
+
+        // Funktion zur Berechnung des Gesamtpreises
+        function calculateTotalPrice() {
+            var total = 0;
+            var tbody = document.getElementById('itemsTable').getElementsByTagName('tbody')[0];
+            var rows = tbody.getElementsByTagName('tr');
+
+            for (var i = 0; i < rows.length; i++) {
+                var priceText = rows[i].querySelector('.price').innerText;
+                var price = parseFloat(priceText.replace('.', '').replace(',', '.').replace(' €', ''));
+                if (!isNaN(price)) {
+                    total += price;
+                }
+            }
+
+            document.getElementById('totalPrice').innerText = total.toFixed(2).replace('.', ',') + ' €';
+        }
+
+        // Event Listener für die Schaltfläche "Artikel hinzufügen"
+        document.getElementById('addItemBtn').addEventListener('click', addItemRow);
+
+        // Initial eine Zeile hinzufügen
+        addItemRow();
+    </script>
+
+</body>
+
+</html>
