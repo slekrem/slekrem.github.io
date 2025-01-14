@@ -1,3 +1,6 @@
 /projects/power-func/node_modules
 /projects/power-func/.parcel-cache
 /projects/power-func/dist
+/projects/genesis-chronic/.parcel-cache
+/projects/genesis-chronic/dist
+/projects/genesis-chronic/node_modules
