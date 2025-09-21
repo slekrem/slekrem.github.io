@@ -69,29 +69,35 @@
                     </div>
                     <div class="card-body">
                         <div class="row text-center">
-                            <div class="col-md-2 col-6 mb-3">
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
                                 <div class="h4 text-success mb-1" id="price-usd">$ --</div>
-                                <small class="text-muted">USD</small>
+                                <small class="text-muted d-block">USD</small>
+                                <small class="text-success" id="sats-usd">-- sats = $1</small>
                             </div>
-                            <div class="col-md-2 col-6 mb-3">
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
                                 <div class="h4 text-primary mb-1" id="price-eur">€ --</div>
-                                <small class="text-muted">EUR</small>
+                                <small class="text-muted d-block">EUR</small>
+                                <small class="text-primary" id="sats-eur">-- sats = €1</small>
                             </div>
-                            <div class="col-md-2 col-6 mb-3">
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
                                 <div class="h4 text-info mb-1" id="price-gbp">£ --</div>
-                                <small class="text-muted">GBP</small>
+                                <small class="text-muted d-block">GBP</small>
+                                <small class="text-info" id="sats-gbp">-- sats = £1</small>
                             </div>
-                            <div class="col-md-2 col-6 mb-3">
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
                                 <div class="h4 text-warning mb-1" id="price-chf">₣ --</div>
-                                <small class="text-muted">CHF</small>
+                                <small class="text-muted d-block">CHF</small>
+                                <small class="text-warning" id="sats-chf">-- sats = ₣1</small>
                             </div>
-                            <div class="col-md-2 col-6 mb-3">
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
                                 <div class="h4 text-secondary mb-1" id="price-cad">C$ --</div>
-                                <small class="text-muted">CAD</small>
+                                <small class="text-muted d-block">CAD</small>
+                                <small class="text-secondary" id="sats-cad">-- sats = C$1</small>
                             </div>
-                            <div class="col-md-2 col-6 mb-3">
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
                                 <div class="h4 text-dark mb-1" id="price-jpy">¥ --</div>
-                                <small class="text-muted">JPY</small>
+                                <small class="text-muted d-block">JPY</small>
+                                <small class="text-dark" id="sats-jpy">-- sats = ¥1</small>
                             </div>
                         </div>
                         <div class="row mt-2">
@@ -501,6 +507,7 @@
                 const currencies = ['usd', 'eur', 'gbp', 'chf', 'cad', 'jpy'];
                 currencies.forEach(currency => {
                     document.getElementById(`price-${currency}`).textContent = 'Error';
+                    document.getElementById(`sats-${currency}`).textContent = 'Error';
                 });
                 document.getElementById('price-updated').textContent = 'Letztes Update: Fehler';
             }
@@ -509,18 +516,20 @@
         function updatePriceDisplay(priceData) {
             // Format and display prices
             const currencies = {
-                usd: { symbol: '$', value: priceData.USD },
-                eur: { symbol: '€', value: priceData.EUR },
-                gbp: { symbol: '£', value: priceData.GBP },
-                chf: { symbol: '₣', value: priceData.CHF },
-                cad: { symbol: 'C$', value: priceData.CAD },
-                jpy: { symbol: '¥', value: priceData.JPY }
+                usd: { symbol: '$', value: priceData.USD, unit: '$1' },
+                eur: { symbol: '€', value: priceData.EUR, unit: '€1' },
+                gbp: { symbol: '£', value: priceData.GBP, unit: '£1' },
+                chf: { symbol: '₣', value: priceData.CHF, unit: '₣1' },
+                cad: { symbol: 'C$', value: priceData.CAD, unit: 'C$1' },
+                jpy: { symbol: '¥', value: priceData.JPY, unit: '¥1' }
             };
 
             Object.entries(currencies).forEach(([currency, data]) => {
-                const element = document.getElementById(`price-${currency}`);
-                if (element && data.value) {
-                    // Format number with appropriate decimals
+                const priceElement = document.getElementById(`price-${currency}`);
+                const satsElement = document.getElementById(`sats-${currency}`);
+
+                if (priceElement && satsElement && data.value) {
+                    // Format Bitcoin price
                     const formattedValue = currency === 'jpy' ?
                         Math.round(data.value).toLocaleString() :
                         data.value.toLocaleString('de-DE', {
@@ -528,7 +537,15 @@
                             maximumFractionDigits: 0
                         });
 
-                    element.textContent = `${data.symbol} ${formattedValue}`;
+                    priceElement.textContent = `${data.symbol} ${formattedValue}`;
+
+                    // Calculate satoshis for 1 unit of currency
+                    // 1 BTC = 100,000,000 satoshis
+                    // satoshis per currency unit = 100,000,000 / (BTC price in that currency)
+                    const satoshisPerUnit = Math.round(100000000 / data.value);
+                    const formattedSats = satoshisPerUnit.toLocaleString('de-DE');
+
+                    satsElement.textContent = `${formattedSats} sats = ${data.unit}`;
                 }
             });
 
