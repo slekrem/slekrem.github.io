@@ -333,7 +333,11 @@
             targetValue: 0,
             initialPrice: 0,
             checkInterval: null,
-            threshold: 100 // minimum sats difference to trigger rebalancing
+            threshold: 100, // minimum sats difference to trigger rebalancing
+            lastRebalanceTime: 0,
+            rebalanceMinInterval: 30000, // minimum 30 seconds between rebalances
+            errorCount: 0,
+            maxErrors: 5
         };
 
         // Local Storage Functions
@@ -747,11 +751,11 @@
                 // Update UI
                 updateStabilizationUI();
 
-                // Start monitoring
-                stabilizationData.checkInterval = setInterval(checkRebalancing, 10000); // every 10 seconds
+                // Start monitoring with longer interval to reduce timeout issues
+                stabilizationData.checkInterval = setInterval(checkRebalancing, 15000); // every 15 seconds
 
                 log(`💱 Stabilisierung aktiv: ${currentBalance} sats = ${targetValue.toFixed(2)} ${currency.toUpperCase()}`);
-                log(`💱 Überwachung gestartet (alle 10 Sekunden)`);
+                log(`💱 Überwachung gestartet (alle 15 Sekunden mit Timeout-Schutz)`);
 
             } catch (error) {
                 log(`💱 Fehler beim Starten der Stabilisierung: ${error.message}`);
@@ -810,59 +814,115 @@
                 // Update status display
                 updateStabilizationStatus(currentBalance, currentValue, requiredBalance, difference);
 
-                // Check if rebalancing is needed
+                // Check if rebalancing is needed and allowed
+                const now = Date.now();
+                const timeSinceLastRebalance = now - stabilizationData.lastRebalanceTime;
+
                 if (Math.abs(difference) > stabilizationData.threshold) {
-                    await performRebalancing(difference);
+                    if (timeSinceLastRebalance >= stabilizationData.rebalanceMinInterval) {
+                        log(`💱 Rebalancing benötigt: ${difference} sats Differenz`);
+                        await performRebalancing(difference);
+                    } else {
+                        const waitTime = Math.round((stabilizationData.rebalanceMinInterval - timeSinceLastRebalance) / 1000);
+                        log(`💱 Rebalancing erforderlich, aber warte noch ${waitTime}s (Cooldown)`);
+                    }
                 }
 
+                // Reset error counter on successful check
+                stabilizationData.errorCount = 0;
+
             } catch (error) {
-                log(`💱 Fehler bei Rebalancing-Check: ${error.message}`);
+                stabilizationData.errorCount++;
+                log(`💱 Fehler bei Rebalancing-Check (${stabilizationData.errorCount}/${stabilizationData.maxErrors}): ${error.message}`);
                 console.error('Rebalancing check error:', error);
+
+                // Stop stabilization if too many errors
+                if (stabilizationData.errorCount >= stabilizationData.maxErrors) {
+                    log(`💱 Zu viele Fehler (${stabilizationData.maxErrors}), stoppe Stabilisierung`);
+                    stopStabilization();
+                }
             }
         }
 
         async function performRebalancing(difference) {
+            const amount = Math.abs(difference);
+
             try {
-                const amount = Math.abs(difference);
+                log(`💱 Starte Rebalancing: ${amount} sats (${difference > 0 ? 'Wallet 2 → Wallet 1' : 'Wallet 1 → Wallet 2'})`);
+
+                // Add timeout wrapper for all operations
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Operation timed out after 30 seconds')), 30000)
+                );
 
                 if (difference > 0) {
                     // Wallet 2 has too much -> send excess to Wallet 1
-                    log(`💱 Rebalancing: Sende ${amount} sats von Wallet 2 zu Wallet 1`);
 
-                    // Create invoice on Wallet 1
-                    const invoice = await wallets[1].nwcClient.makeInvoice({
+                    // Create invoice on Wallet 1 with timeout
+                    const invoicePromise = wallets[1].nwcClient.makeInvoice({
                         amount: amount * 1000, // Convert sats to millisats
-                        description: `Stabilization rebalancing - excess ${stabilizationData.currency.toUpperCase()}`
+                        description: `Stabilization: excess ${amount} sats (${stabilizationData.currency.toUpperCase()})`
                     });
 
-                    // Pay invoice from Wallet 2
-                    const payment = await wallets[2].nwcClient.payInvoice({
+                    const invoice = await Promise.race([invoicePromise, timeoutPromise]);
+                    log(`💱 Invoice erstellt: ${amount} sats`);
+
+                    // Pay invoice from Wallet 2 with timeout
+                    const paymentPromise = wallets[2].nwcClient.payInvoice({
                         invoice: invoice.invoice
                     });
 
+                    const payment = await Promise.race([paymentPromise, timeoutPromise]);
                     log(`💱 Rebalancing erfolgreich: ${amount} sats übertragen (Wallet 2 → Wallet 1)`);
 
                 } else {
                     // Wallet 2 has too little -> receive from Wallet 1
-                    log(`💱 Rebalancing: Sende ${amount} sats von Wallet 1 zu Wallet 2`);
 
-                    // Create invoice on Wallet 2
-                    const invoice = await wallets[2].nwcClient.makeInvoice({
+                    // Create invoice on Wallet 2 with timeout
+                    const invoicePromise = wallets[2].nwcClient.makeInvoice({
                         amount: amount * 1000, // Convert sats to millisats
-                        description: `Stabilization rebalancing - deficit ${stabilizationData.currency.toUpperCase()}`
+                        description: `Stabilization: deficit ${amount} sats (${stabilizationData.currency.toUpperCase()})`
                     });
 
-                    // Pay invoice from Wallet 1
-                    const payment = await wallets[1].nwcClient.payInvoice({
+                    const invoice = await Promise.race([invoicePromise, timeoutPromise]);
+                    log(`💱 Invoice erstellt: ${amount} sats`);
+
+                    // Pay invoice from Wallet 1 with timeout
+                    const paymentPromise = wallets[1].nwcClient.payInvoice({
                         invoice: invoice.invoice
                     });
 
+                    const payment = await Promise.race([paymentPromise, timeoutPromise]);
                     log(`💱 Rebalancing erfolgreich: ${amount} sats übertragen (Wallet 1 → Wallet 2)`);
                 }
 
+                // Update last rebalance time
+                stabilizationData.lastRebalanceTime = Date.now();
+                stabilizationData.errorCount = 0; // Reset error counter on success
+
             } catch (error) {
-                log(`💱 Fehler beim Rebalancing: ${error.message}`);
+                stabilizationData.errorCount++;
+
+                if (error.message.includes('timed out')) {
+                    log(`💱 Rebalancing Timeout: ${error.message}`);
+                    log(`💱 Möglicherweise Relay-Verbindungsprobleme. Versuche beim nächsten Zyklus erneut.`);
+                } else if (error.message.includes('insufficient')) {
+                    log(`💱 Rebalancing fehlgeschlagen: Unzureichende Balance`);
+                } else {
+                    log(`💱 Rebalancing fehlgeschlagen: ${error.message}`);
+                }
+
                 console.error('Rebalancing error:', error);
+
+                // If too many consecutive errors, pause rebalancing for longer
+                if (stabilizationData.errorCount >= 3) {
+                    stabilizationData.lastRebalanceTime = Date.now();
+                    log(`💱 Pausiere Rebalancing für 2 Minuten nach ${stabilizationData.errorCount} Fehlern`);
+                    setTimeout(() => {
+                        stabilizationData.lastRebalanceTime = 0;
+                        log(`💱 Rebalancing wieder bereit`);
+                    }, 120000); // 2 minutes pause
+                }
             }
         }
 
