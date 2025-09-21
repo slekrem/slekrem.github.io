@@ -4,96 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NWC Demo - Nostr Wallet Connect</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background: #f5f5f5;
+            background: #f8f9fa;
         }
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .demo-section {
-            margin: 20px 0;
-            padding: 20px;
-            border: 1px solid #ddd;
+        .wallet-card {
+            border: 1px solid #dee2e6;
             border-radius: 8px;
-            background: #fafafa;
-        }
-        .connection-form {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .connection-form input, .connection-form textarea {
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-        .connection-form button {
-            background: #0066cc;
-            color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        .connection-form button:hover {
-            background: #0052a3;
-        }
-        .connection-form button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-        .status {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        .status.connected {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .status.disconnected {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .status.connecting {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
-        .wallet-actions {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .wallet-actions button {
-            padding: 10px;
-            border: 1px solid #0066cc;
             background: white;
-            color: #0066cc;
-            border-radius: 5px;
-            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        .wallet-actions button:hover {
-            background: #0066cc;
-            color: white;
+        .wallet-card .card-header {
+            background: #e9ecef;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
         }
         .result-display {
             background: #f8f9fa;
@@ -101,72 +26,179 @@
             border-radius: 5px;
             padding: 15px;
             margin: 10px 0;
-            font-family: monospace;
+            font-family: 'Courier New', monospace;
             white-space: pre-wrap;
             max-height: 200px;
             overflow-y: auto;
+            font-size: 12px;
+        }
+        .status-badge {
+            font-size: 0.875rem;
+        }
+        .btn-group-vertical .btn {
+            margin-bottom: 5px;
+        }
+        .debug-section {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🔗 Nostr Wallet Connect Demo</h1>
-            <p>Experimentiere mit NWC (Nostr Wallet Connect) Funktionen</p>
-        </div>
-
-        <!-- Connection Section -->
-        <div class="demo-section">
-            <h2>Wallet Verbindung</h2>
-            <div class="connection-form">
-                <label for="nwc-url">NWC Connection String:</label>
-                <textarea id="nwc-url" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3"></textarea>
-                <button id="connect-btn" onclick="connectWallet()">Wallet Verbinden</button>
-                <button id="disconnect-btn" onclick="disconnectWallet()" disabled>Verbindung Trennen</button>
-            </div>
-            <div id="connection-status" class="status disconnected">
-                Status: Nicht verbunden
+    <div class="container-fluid py-4">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-12 text-center">
+                <h1 class="display-5 fw-bold text-primary">🔗 Nostr Wallet Connect Demo</h1>
+                <p class="lead">Experimentiere mit zwei NWC (Nostr Wallet Connect) Wallets gleichzeitig</p>
             </div>
         </div>
 
+        <!-- Two Wallet Columns -->
+        <div class="row">
+            <!-- Wallet 1 -->
+            <div class="col-lg-6 mb-4">
+                <div class="wallet-card card h-100">
+                    <div class="card-header text-center">
+                        <h3 class="card-title mb-0">💰 Wallet 1</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- Connection Section -->
+                        <div class="mb-4">
+                            <h5 class="card-subtitle mb-3">Verbindung</h5>
+                            <div class="mb-3">
+                                <label for="nwc-url-1" class="form-label">NWC Connection String:</label>
+                                <textarea id="nwc-url-1" class="form-control" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3"></textarea>
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex">
+                                <button id="connect-btn-1" class="btn btn-primary flex-fill" onclick="connectWallet(1)">Verbinden</button>
+                                <button id="disconnect-btn-1" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(1)" disabled>Trennen</button>
+                            </div>
+                            <div class="mt-2">
+                                <span id="connection-status-1" class="badge bg-secondary status-badge">Nicht verbunden</span>
+                            </div>
+                        </div>
 
-        <!-- Wallet Info -->
-        <div class="demo-section">
-            <h2>Wallet Information</h2>
-            <button onclick="getWalletInfo()">get_info</button>
-            <button onclick="getBalance()">get_balance</button>
-            <div id="wallet-info" class="result-display"></div>
-        </div>
+                        <!-- Wallet Info -->
+                        <div class="mb-4">
+                            <h5 class="card-subtitle mb-3">Wallet Information</h5>
+                            <div class="d-grid gap-2 d-md-flex mb-2">
+                                <button class="btn btn-outline-info btn-sm flex-fill" onclick="getWalletInfo(1)">get_info</button>
+                                <button class="btn btn-outline-info btn-sm flex-fill" onclick="getBalance(1)">get_balance</button>
+                            </div>
+                            <div id="wallet-info-1" class="result-display"></div>
+                        </div>
 
-        <!-- Payment Actions -->
-        <div class="demo-section">
-            <h2>Payment Aktionen</h2>
-            <div class="wallet-actions">
-                <button onclick="createInvoice()">Invoice Erstellen</button>
-                <button onclick="payInvoice()">Invoice Bezahlen</button>
-                <button onclick="listTransactions()">Transaktionen Anzeigen</button>
-                <button onclick="payKeysend()">Keysend Payment</button>
+                        <!-- Payment Actions -->
+                        <div class="mb-3">
+                            <h5 class="card-subtitle mb-3">Payment Aktionen</h5>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <button class="btn btn-success btn-sm w-100" onclick="createInvoice(1)">Invoice Erstellen</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-warning btn-sm w-100" onclick="payInvoice(1)">Invoice Bezahlen</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-info btn-sm w-100" onclick="listTransactions(1)">Transaktionen</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-secondary btn-sm w-100" onclick="payKeysend(1)">Keysend</button>
+                                </div>
+                            </div>
+                            <div id="payment-result-1" class="result-display"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div id="payment-result" class="result-display"></div>
-        </div>
 
+            <!-- Wallet 2 -->
+            <div class="col-lg-6 mb-4">
+                <div class="wallet-card card h-100">
+                    <div class="card-header text-center">
+                        <h3 class="card-title mb-0">💳 Wallet 2</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- Connection Section -->
+                        <div class="mb-4">
+                            <h5 class="card-subtitle mb-3">Verbindung</h5>
+                            <div class="mb-3">
+                                <label for="nwc-url-2" class="form-label">NWC Connection String:</label>
+                                <textarea id="nwc-url-2" class="form-control" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3"></textarea>
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex">
+                                <button id="connect-btn-2" class="btn btn-primary flex-fill" onclick="connectWallet(2)">Verbinden</button>
+                                <button id="disconnect-btn-2" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(2)" disabled>Trennen</button>
+                            </div>
+                            <div class="mt-2">
+                                <span id="connection-status-2" class="badge bg-secondary status-badge">Nicht verbunden</span>
+                            </div>
+                        </div>
+
+                        <!-- Wallet Info -->
+                        <div class="mb-4">
+                            <h5 class="card-subtitle mb-3">Wallet Information</h5>
+                            <div class="d-grid gap-2 d-md-flex mb-2">
+                                <button class="btn btn-outline-info btn-sm flex-fill" onclick="getWalletInfo(2)">get_info</button>
+                                <button class="btn btn-outline-info btn-sm flex-fill" onclick="getBalance(2)">get_balance</button>
+                            </div>
+                            <div id="wallet-info-2" class="result-display"></div>
+                        </div>
+
+                        <!-- Payment Actions -->
+                        <div class="mb-3">
+                            <h5 class="card-subtitle mb-3">Payment Aktionen</h5>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <button class="btn btn-success btn-sm w-100" onclick="createInvoice(2)">Invoice Erstellen</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-warning btn-sm w-100" onclick="payInvoice(2)">Invoice Bezahlen</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-info btn-sm w-100" onclick="listTransactions(2)">Transaktionen</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-secondary btn-sm w-100" onclick="payKeysend(2)">Keysend</button>
+                                </div>
+                            </div>
+                            <div id="payment-result-2" class="result-display"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Debug / Log Section -->
-        <div class="demo-section">
-            <h2>Debug Log</h2>
-            <button onclick="clearLog()">Log Löschen</button>
-            <div id="debug-log" class="result-display">Debug-Nachrichten werden hier angezeigt...</div>
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="debug-section card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">🔍 Debug Log</h5>
+                        <button class="btn btn-outline-danger btn-sm" onclick="clearLog()">Log Löschen</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="debug-log" class="result-display">Debug-Nachrichten werden hier angezeigt...</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <!-- Import Alby NWC SDK locally -->
     <script type="module">
         import { LN, nwc } from '@getalby/sdk';
 
-        // Real NWC functionality using @getalby/sdk
-        let isConnected = false;
-        let nwcClient = null;
-        let connectionData = null;
+        // Real NWC functionality using @getalby/sdk - Dual Wallet Support
+        const wallets = {
+            1: { isConnected: false, nwcClient: null, connectionData: null },
+            2: { isConnected: false, nwcClient: null, connectionData: null }
+        };
 
         function log(message) {
             const logElement = document.getElementById('debug-log');
@@ -175,14 +207,16 @@
             logElement.scrollTop = logElement.scrollHeight;
         }
 
-        function updateConnectionStatus(status, message) {
-            const statusElement = document.getElementById('connection-status');
-            statusElement.className = `status ${status}`;
-            statusElement.textContent = `Status: ${message}`;
+        function updateConnectionStatus(walletId, status, message) {
+            const statusElement = document.getElementById(`connection-status-${walletId}`);
+            const badgeClass = status === 'connected' ? 'bg-success' :
+                              status === 'connecting' ? 'bg-warning' : 'bg-secondary';
+            statusElement.className = `badge ${badgeClass} status-badge`;
+            statusElement.textContent = message;
         }
 
-        async function connectWallet() {
-            const nwcUrl = document.getElementById('nwc-url').value;
+        async function connectWallet(walletId) {
+            const nwcUrl = document.getElementById(`nwc-url-${walletId}`).value;
 
             if (!nwcUrl) {
                 alert('Bitte geben Sie eine gültige NWC Connection String ein');
@@ -194,114 +228,114 @@
                 return;
             }
 
-            log('Versuche echte Wallet zu verbinden...');
-            updateConnectionStatus('connecting', 'Verbindung wird hergestellt...');
+            log(`Wallet ${walletId}: Versuche echte Wallet zu verbinden...`);
+            updateConnectionStatus(walletId, 'connecting', 'Verbindung wird hergestellt...');
 
             try {
                 // Create new NWC client with credentials
-                nwcClient = new nwc.NWCClient({ nostrWalletConnectUrl: nwcUrl });
+                wallets[walletId].nwcClient = new nwc.NWCClient({ nostrWalletConnectUrl: nwcUrl });
 
                 // Test connection by getting wallet info
-                const info = await nwcClient.getInfo();
+                const info = await wallets[walletId].nwcClient.getInfo();
 
-                isConnected = true;
-                connectionData = { url: nwcUrl };
-                updateConnectionStatus('connected', 'Wallet verbunden');
-                document.getElementById('connect-btn').disabled = true;
-                document.getElementById('disconnect-btn').disabled = false;
+                wallets[walletId].isConnected = true;
+                wallets[walletId].connectionData = { url: nwcUrl };
+                updateConnectionStatus(walletId, 'connected', 'Verbunden');
+                document.getElementById(`connect-btn-${walletId}`).disabled = true;
+                document.getElementById(`disconnect-btn-${walletId}`).disabled = false;
 
-                log('Wallet erfolgreich verbunden!');
-                log(`Wallet Alias: ${info.alias || 'N/A'}`);
-                log(`Pubkey: ${info.pubkey ? info.pubkey.substring(0, 20) + '...' : 'N/A'}`);
-                log(`Methods: ${info.methods ? info.methods.join(', ') : 'N/A'}`);
+                log(`Wallet ${walletId}: Erfolgreich verbunden!`);
+                log(`Wallet ${walletId}: Alias: ${info.alias || 'N/A'}`);
+                log(`Wallet ${walletId}: Pubkey: ${info.pubkey ? info.pubkey.substring(0, 20) + '...' : 'N/A'}`);
+                log(`Wallet ${walletId}: Methods: ${info.methods ? info.methods.join(', ') : 'N/A'}`);
 
                 // Display initial wallet info
-                document.getElementById('wallet-info').textContent = JSON.stringify(info, null, 2);
+                document.getElementById(`wallet-info-${walletId}`).textContent = JSON.stringify(info, null, 2);
 
             } catch (error) {
-                updateConnectionStatus('disconnected', 'Verbindung fehlgeschlagen');
-                log(`Fehler beim Verbinden: ${error.message}`);
-                console.error('NWC Connection Error:', error);
+                updateConnectionStatus(walletId, 'disconnected', 'Verbindung fehlgeschlagen');
+                log(`Wallet ${walletId}: Fehler beim Verbinden: ${error.message}`);
+                console.error(`Wallet ${walletId} NWC Connection Error:`, error);
             }
         }
 
-        function disconnectWallet() {
-            log('Wallet Verbindung wird getrennt...');
-            isConnected = false;
-            nwcClient = null;
-            connectionData = null;
-            updateConnectionStatus('disconnected', 'Nicht verbunden');
-            document.getElementById('connect-btn').disabled = false;
-            document.getElementById('disconnect-btn').disabled = true;
-            document.getElementById('wallet-info').textContent = '';
-            document.getElementById('payment-result').textContent = '';
-            log('Wallet erfolgreich getrennt');
+        function disconnectWallet(walletId) {
+            log(`Wallet ${walletId}: Verbindung wird getrennt...`);
+            wallets[walletId].isConnected = false;
+            wallets[walletId].nwcClient = null;
+            wallets[walletId].connectionData = null;
+            updateConnectionStatus(walletId, 'disconnected', 'Nicht verbunden');
+            document.getElementById(`connect-btn-${walletId}`).disabled = false;
+            document.getElementById(`disconnect-btn-${walletId}`).disabled = true;
+            document.getElementById(`wallet-info-${walletId}`).textContent = '';
+            document.getElementById(`payment-result-${walletId}`).textContent = '';
+            log(`Wallet ${walletId}: Erfolgreich getrennt`);
         }
 
 
-        async function getWalletInfo() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
+        async function getWalletInfo(walletId) {
+            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
+                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
                 return;
             }
 
             try {
-                log('get_info Request gesendet...');
-                const info = await nwcClient.getInfo();
-                document.getElementById('wallet-info').textContent = JSON.stringify(info, null, 2);
-                log('get_info Response erhalten');
+                log(`Wallet ${walletId}: get_info Request gesendet...`);
+                const info = await wallets[walletId].nwcClient.getInfo();
+                document.getElementById(`wallet-info-${walletId}`).textContent = JSON.stringify(info, null, 2);
+                log(`Wallet ${walletId}: get_info Response erhalten`);
             } catch (error) {
-                log(`Fehler bei get_info: ${error.message}`);
-                document.getElementById('wallet-info').textContent = `Error: ${error.message}`;
+                log(`Wallet ${walletId}: Fehler bei get_info: ${error.message}`);
+                document.getElementById(`wallet-info-${walletId}`).textContent = `Error: ${error.message}`;
             }
         }
 
-        async function getBalance() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
+        async function getBalance(walletId) {
+            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
+                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
                 return;
             }
 
             try {
-                log('get_balance Request gesendet...');
-                const balance = await nwcClient.getBalance();
-                document.getElementById('wallet-info').textContent = JSON.stringify(balance, null, 2);
-                log(`Balance: ${balance.balance} sats`);
+                log(`Wallet ${walletId}: get_balance Request gesendet...`);
+                const balance = await wallets[walletId].nwcClient.getBalance();
+                document.getElementById(`wallet-info-${walletId}`).textContent = JSON.stringify(balance, null, 2);
+                log(`Wallet ${walletId}: Balance: ${balance.balance} sats`);
             } catch (error) {
-                log(`Fehler bei get_balance: ${error.message}`);
-                document.getElementById('wallet-info').textContent = `Error: ${error.message}`;
+                log(`Wallet ${walletId}: Fehler bei get_balance: ${error.message}`);
+                document.getElementById(`wallet-info-${walletId}`).textContent = `Error: ${error.message}`;
             }
         }
 
-        async function createInvoice() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
+        async function createInvoice(walletId) {
+            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
+                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
                 return;
             }
 
             const amount = prompt('Betrag in Satoshis eingeben:', '1000');
             if (!amount) return;
 
-            const description = prompt('Beschreibung (optional):', 'NWC Demo Invoice');
+            const description = prompt('Beschreibung (optional):', `NWC Demo Invoice - Wallet ${walletId}`);
 
             try {
-                log(`make_invoice Request für ${amount} sats...`);
-                const invoice = await nwcClient.makeInvoice({
+                log(`Wallet ${walletId}: make_invoice Request für ${amount} sats...`);
+                const invoice = await wallets[walletId].nwcClient.makeInvoice({
                     amount: parseInt(amount) * 1000, // Convert to millisats
-                    description: description || 'NWC Demo Invoice'
+                    description: description || `NWC Demo Invoice - Wallet ${walletId}`
                 });
 
-                document.getElementById('payment-result').textContent = JSON.stringify(invoice, null, 2);
-                log('Invoice erfolgreich erstellt');
+                document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(invoice, null, 2);
+                log(`Wallet ${walletId}: Invoice erfolgreich erstellt`);
             } catch (error) {
-                log(`Fehler beim Erstellen der Invoice: ${error.message}`);
-                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
+                log(`Wallet ${walletId}: Fehler beim Erstellen der Invoice: ${error.message}`);
+                document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}`;
             }
         }
 
-        async function payInvoice() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
+        async function payInvoice(walletId) {
+            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
+                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
                 return;
             }
 
@@ -309,38 +343,38 @@
             if (!invoice) return;
 
             try {
-                log('pay_invoice Request gesendet...');
-                const result = await nwcClient.payInvoice({ invoice: invoice });
+                log(`Wallet ${walletId}: pay_invoice Request gesendet...`);
+                const result = await wallets[walletId].nwcClient.payInvoice({ invoice: invoice });
 
-                document.getElementById('payment-result').textContent = JSON.stringify(result, null, 2);
-                log('Payment erfolgreich gesendet');
+                document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(result, null, 2);
+                log(`Wallet ${walletId}: Payment erfolgreich gesendet`);
             } catch (error) {
-                log(`Fehler beim Bezahlen: ${error.message}`);
-                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
+                log(`Wallet ${walletId}: Fehler beim Bezahlen: ${error.message}`);
+                document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}`;
             }
         }
 
-        async function listTransactions() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
+        async function listTransactions(walletId) {
+            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
+                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
                 return;
             }
 
             try {
-                log('list_transactions Request gesendet...');
-                const transactions = await nwcClient.listTransactions();
+                log(`Wallet ${walletId}: list_transactions Request gesendet...`);
+                const transactions = await wallets[walletId].nwcClient.listTransactions();
 
-                document.getElementById('payment-result').textContent = JSON.stringify(transactions, null, 2);
-                log('Transaktionen abgerufen');
+                document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(transactions, null, 2);
+                log(`Wallet ${walletId}: Transaktionen abgerufen`);
             } catch (error) {
-                log(`Fehler beim Abrufen der Transaktionen: ${error.message}`);
-                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
+                log(`Wallet ${walletId}: Fehler beim Abrufen der Transaktionen: ${error.message}`);
+                document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}`;
             }
         }
 
-        async function payKeysend() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
+        async function payKeysend(walletId) {
+            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
+                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
                 return;
             }
 
@@ -350,18 +384,18 @@
             if (!pubkey || !amount) return;
 
             try {
-                log(`pay_keysend Request für ${amount} sats an ${pubkey.substring(0, 10)}...`);
+                log(`Wallet ${walletId}: pay_keysend Request für ${amount} sats an ${pubkey.substring(0, 10)}...`);
 
-                const result = await nwcClient.payKeysend({
+                const result = await wallets[walletId].nwcClient.payKeysend({
                     pubkey: pubkey,
                     amount: parseInt(amount) * 1000 // Convert to millisats
                 });
 
-                document.getElementById('payment-result').textContent = JSON.stringify(result, null, 2);
-                log('Keysend Payment erfolgreich gesendet');
+                document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(result, null, 2);
+                log(`Wallet ${walletId}: Keysend Payment erfolgreich gesendet`);
             } catch (error) {
-                log(`Fehler beim Keysend: ${error.message}`);
-                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
+                log(`Wallet ${walletId}: Fehler beim Keysend: ${error.message}`);
+                document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}`;
             }
         }
 
