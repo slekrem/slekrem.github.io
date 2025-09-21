@@ -1,6 +1,13 @@
-/projects/power-func/node_modules
+*package-lock.json
+
 /projects/power-func/.parcel-cache
+/projects/power-func/node_modules
 /projects/power-func/dist
+
 /projects/genesis-chronic/.parcel-cache
-/projects/genesis-chronic/dist
 /projects/genesis-chronic/node_modules
+/projects/genesis-chronic/dist
+
+/projects/nwc/.parcel-cache
+/projects/nwc/node_modules
+/projects/nwc/dist

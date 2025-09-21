@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NWC Demo - Nostr Wallet Connect</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .demo-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        .connection-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .connection-form input, .connection-form textarea {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .connection-form button {
+            background: #0066cc;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .connection-form button:hover {
+            background: #0052a3;
+        }
+        .connection-form button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .wallet-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .wallet-actions button {
+            padding: 10px;
+            border: 1px solid #0066cc;
+            background: white;
+            color: #0066cc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .wallet-actions button:hover {
+            background: #0066cc;
+            color: white;
+        }
+        .result-display {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .nwc-link {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #2196f3;
+            margin: 10px 0;
+        }
+        .qr-placeholder {
+            width: 200px;
+            height: 200px;
+            border: 2px dashed #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px auto;
+            border-radius: 5px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔗 Nostr Wallet Connect Demo</h1>
+            <p>Experimentiere mit NWC (Nostr Wallet Connect) Funktionen</p>
+        </div>
+
+        <!-- Connection Section -->
+        <div class="demo-section">
+            <h2>Wallet Verbindung</h2>
+            <div class="connection-form">
+                <label for="nwc-url">NWC Connection String:</label>
+                <textarea id="nwc-url" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3"></textarea>
+                <button id="connect-btn" onclick="connectWallet()">Wallet Verbinden</button>
+                <button id="disconnect-btn" onclick="disconnectWallet()" disabled>Verbindung Trennen</button>
+            </div>
+            <div id="connection-status" class="status disconnected">
+                Status: Nicht verbunden
+            </div>
+        </div>
+
+        <!-- NWC Link Generator -->
+        <div class="demo-section">
+            <h2>NWC Link Generator</h2>
+            <p>Generiere einen NWC Link für Tests (Simulation):</p>
+            <button onclick="generateDemoLink()">Demo NWC Link Generieren</button>
+            <div id="nwc-link-display" class="nwc-link" style="display: none;">
+                <strong>Generated NWC Link:</strong><br>
+                <code id="generated-link"></code>
+            </div>
+        </div>
+
+        <!-- Wallet Info -->
+        <div class="demo-section">
+            <h2>Wallet Information</h2>
+            <button onclick="getWalletInfo()">get_info</button>
+            <button onclick="getBalance()">get_balance</button>
+            <div id="wallet-info" class="result-display"></div>
+        </div>
+
+        <!-- Payment Actions -->
+        <div class="demo-section">
+            <h2>Payment Aktionen</h2>
+            <div class="wallet-actions">
+                <button onclick="createInvoice()">Invoice Erstellen</button>
+                <button onclick="payInvoice()">Invoice Bezahlen</button>
+                <button onclick="listTransactions()">Transaktionen Anzeigen</button>
+                <button onclick="payKeysend()">Keysend Payment</button>
+            </div>
+            <div id="payment-result" class="result-display"></div>
+        </div>
+
+        <!-- QR Code Simulation -->
+        <div class="demo-section">
+            <h2>QR Code (Simulation)</h2>
+            <div class="qr-placeholder" id="qr-display">
+                QR Code wird hier angezeigt
+            </div>
+            <button onclick="showQRCode()">QR Code für NWC Link anzeigen</button>
+        </div>
+
+        <!-- Debug / Log Section -->
+        <div class="demo-section">
+            <h2>Debug Log</h2>
+            <button onclick="clearLog()">Log Löschen</button>
+            <div id="debug-log" class="result-display">Debug-Nachrichten werden hier angezeigt...</div>
+        </div>
+    </div>
+
+    <!-- Import Alby NWC SDK locally -->
+    <script type="module">
+        import { LN, nwc } from '@getalby/sdk';
+
+        // Real NWC functionality using @getalby/sdk
+        let isConnected = false;
+        let nwcClient = null;
+        let connectionData = null;
+
+        function log(message) {
+            const logElement = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusElement = document.getElementById('connection-status');
+            statusElement.className = `status ${status}`;
+            statusElement.textContent = `Status: ${message}`;
+        }
+
+        async function connectWallet() {
+            const nwcUrl = document.getElementById('nwc-url').value;
+
+            if (!nwcUrl) {
+                alert('Bitte geben Sie eine gültige NWC Connection String ein');
+                return;
+            }
+
+            if (!nwcUrl.startsWith('nostr+walletconnect://')) {
+                alert('Ungültiger NWC Connection String. Muss mit "nostr+walletconnect://" beginnen');
+                return;
+            }
+
+            log('Versuche echte Wallet zu verbinden...');
+            updateConnectionStatus('connecting', 'Verbindung wird hergestellt...');
+
+            try {
+                // Create new NWC client with credentials
+                nwcClient = new nwc.NWCClient({ nostrWalletConnectUrl: nwcUrl });
+
+                // Test connection by getting wallet info
+                const info = await nwcClient.getInfo();
+
+                isConnected = true;
+                connectionData = { url: nwcUrl };
+                updateConnectionStatus('connected', 'Wallet verbunden');
+                document.getElementById('connect-btn').disabled = true;
+                document.getElementById('disconnect-btn').disabled = false;
+
+                log('Wallet erfolgreich verbunden!');
+                log(`Wallet Alias: ${info.alias || 'N/A'}`);
+                log(`Pubkey: ${info.pubkey ? info.pubkey.substring(0, 20) + '...' : 'N/A'}`);
+                log(`Methods: ${info.methods ? info.methods.join(', ') : 'N/A'}`);
+
+                // Display initial wallet info
+                document.getElementById('wallet-info').textContent = JSON.stringify(info, null, 2);
+
+            } catch (error) {
+                updateConnectionStatus('disconnected', 'Verbindung fehlgeschlagen');
+                log(`Fehler beim Verbinden: ${error.message}`);
+                console.error('NWC Connection Error:', error);
+            }
+        }
+
+        function disconnectWallet() {
+            log('Wallet Verbindung wird getrennt...');
+            isConnected = false;
+            nwcClient = null;
+            connectionData = null;
+            updateConnectionStatus('disconnected', 'Nicht verbunden');
+            document.getElementById('connect-btn').disabled = false;
+            document.getElementById('disconnect-btn').disabled = true;
+            document.getElementById('wallet-info').textContent = '';
+            document.getElementById('payment-result').textContent = '';
+            log('Wallet erfolgreich getrennt');
+        }
+
+        function generateDemoLink() {
+            const demoLink = 'nostr+walletconnect://d4c4dfbe4a0e1a9a7a5a5f5e6e7d8c9b8a7b6c5d4e3f2g1h0?relay=wss://relay.damus.io&secret=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6';
+            document.getElementById('generated-link').textContent = demoLink;
+            document.getElementById('nwc-link-display').style.display = 'block';
+            document.getElementById('nwc-url').value = demoLink;
+            log('Demo NWC Link generiert (funktioniert nicht mit echten Wallets)');
+        }
+
+        async function getWalletInfo() {
+            if (!isConnected || !nwcClient) {
+                alert('Bitte verbinden Sie zuerst eine Wallet');
+                return;
+            }
+
+            try {
+                log('get_info Request gesendet...');
+                const info = await nwcClient.getInfo();
+                document.getElementById('wallet-info').textContent = JSON.stringify(info, null, 2);
+                log('get_info Response erhalten');
+            } catch (error) {
+                log(`Fehler bei get_info: ${error.message}`);
+                document.getElementById('wallet-info').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function getBalance() {
+            if (!isConnected || !nwcClient) {
+                alert('Bitte verbinden Sie zuerst eine Wallet');
+                return;
+            }
+
+            try {
+                log('get_balance Request gesendet...');
+                const balance = await nwcClient.getBalance();
+                document.getElementById('wallet-info').textContent = JSON.stringify(balance, null, 2);
+                log(`Balance: ${balance.balance} sats`);
+            } catch (error) {
+                log(`Fehler bei get_balance: ${error.message}`);
+                document.getElementById('wallet-info').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function createInvoice() {
+            if (!isConnected || !nwcClient) {
+                alert('Bitte verbinden Sie zuerst eine Wallet');
+                return;
+            }
+
+            const amount = prompt('Betrag in Satoshis eingeben:', '1000');
+            if (!amount) return;
+
+            const description = prompt('Beschreibung (optional):', 'NWC Demo Invoice');
+
+            try {
+                log(`make_invoice Request für ${amount} sats...`);
+                const invoice = await nwcClient.makeInvoice({
+                    amount: parseInt(amount) * 1000, // Convert to millisats
+                    description: description || 'NWC Demo Invoice'
+                });
+
+                document.getElementById('payment-result').textContent = JSON.stringify(invoice, null, 2);
+                log('Invoice erfolgreich erstellt');
+            } catch (error) {
+                log(`Fehler beim Erstellen der Invoice: ${error.message}`);
+                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function payInvoice() {
+            if (!isConnected || !nwcClient) {
+                alert('Bitte verbinden Sie zuerst eine Wallet');
+                return;
+            }
+
+            const invoice = prompt('Lightning Invoice eingeben:', 'lnbc...');
+            if (!invoice) return;
+
+            try {
+                log('pay_invoice Request gesendet...');
+                const result = await nwcClient.payInvoice({ invoice: invoice });
+
+                document.getElementById('payment-result').textContent = JSON.stringify(result, null, 2);
+                log('Payment erfolgreich gesendet');
+            } catch (error) {
+                log(`Fehler beim Bezahlen: ${error.message}`);
+                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function listTransactions() {
+            if (!isConnected || !nwcClient) {
+                alert('Bitte verbinden Sie zuerst eine Wallet');
+                return;
+            }
+
+            try {
+                log('list_transactions Request gesendet...');
+                const transactions = await nwcClient.listTransactions();
+
+                document.getElementById('payment-result').textContent = JSON.stringify(transactions, null, 2);
+                log('Transaktionen abgerufen');
+            } catch (error) {
+                log(`Fehler beim Abrufen der Transaktionen: ${error.message}`);
+                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function payKeysend() {
+            if (!isConnected || !nwcClient) {
+                alert('Bitte verbinden Sie zuerst eine Wallet');
+                return;
+            }
+
+            const pubkey = prompt('Empfänger Pubkey:', '02...');
+            const amount = prompt('Betrag in Satoshis:', '1000');
+
+            if (!pubkey || !amount) return;
+
+            try {
+                log(`pay_keysend Request für ${amount} sats an ${pubkey.substring(0, 10)}...`);
+
+                const result = await nwcClient.payKeysend({
+                    pubkey: pubkey,
+                    amount: parseInt(amount) * 1000 // Convert to millisats
+                });
+
+                document.getElementById('payment-result').textContent = JSON.stringify(result, null, 2);
+                log('Keysend Payment erfolgreich gesendet');
+            } catch (error) {
+                log(`Fehler beim Keysend: ${error.message}`);
+                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function showQRCode() {
+            const nwcUrl = document.getElementById('nwc-url').value;
+            const qrDisplay = document.getElementById('qr-display');
+
+            if (nwcUrl) {
+                // Use QR code library or show text representation
+                qrDisplay.innerHTML = `<div style="text-align: center;">
+                    <div style="background: #f0f0f0; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 10px; word-break: break-all;">
+                        ${nwcUrl}
+                    </div>
+                    <small>NWC Connection String<br>(Für echten QR Code, verwenden Sie eine QR-Bibliothek)</small>
+                </div>`;
+                log('NWC Connection String angezeigt');
+            } else {
+                alert('Bitte geben Sie zuerst einen NWC Link ein');
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('debug-log').textContent = 'Debug-Nachrichten werden hier angezeigt...\n';
+        }
+
+        // Make functions globally available
+        window.connectWallet = connectWallet;
+        window.disconnectWallet = disconnectWallet;
+        window.generateDemoLink = generateDemoLink;
+        window.getWalletInfo = getWalletInfo;
+        window.getBalance = getBalance;
+        window.createInvoice = createInvoice;
+        window.payInvoice = payInvoice;
+        window.listTransactions = listTransactions;
+        window.payKeysend = payKeysend;
+        window.showQRCode = showQRCode;
+        window.clearLog = clearLog;
+
+        // Initialize
+        window.addEventListener('load', () => {
+            log('NWC Demo Seite geladen');
+            log('ECHTE NWC INTEGRATION mit lokalen Dependencies - Verwenden Sie echte Wallet Connection Strings!');
+            log('Unterstützte Wallets: Alby Hub, Coinos, Primal, lnwallet.app, Yakihonne...');
+        });
+    </script>
+</body>
+</html>
