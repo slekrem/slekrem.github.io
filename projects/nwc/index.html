@@ -362,13 +362,33 @@
 
             try {
                 log(`Wallet ${walletId}: list_transactions Request gesendet...`);
-                const transactions = await wallets[walletId].nwcClient.listTransactions();
+
+                // listTransactions mit optionalen Parametern
+                const transactions = await wallets[walletId].nwcClient.listTransactions({
+                    from: 0,
+                    until: Math.floor(Date.now() / 1000),
+                    limit: 50,
+                    offset: 0,
+                    unpaid: false,
+                    type: undefined // alle Typen
+                });
 
                 document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(transactions, null, 2);
-                log(`Wallet ${walletId}: Transaktionen abgerufen`);
+                log(`Wallet ${walletId}: ${transactions.transactions ? transactions.transactions.length : 0} Transaktionen abgerufen`);
             } catch (error) {
                 log(`Wallet ${walletId}: Fehler beim Abrufen der Transaktionen: ${error.message}`);
-                document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}`;
+                console.error(`Wallet ${walletId} listTransactions error:`, error);
+
+                // Fallback: Versuche ohne Parameter
+                try {
+                    log(`Wallet ${walletId}: Versuche listTransactions ohne Parameter...`);
+                    const transactions = await wallets[walletId].nwcClient.listTransactions({});
+                    document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(transactions, null, 2);
+                    log(`Wallet ${walletId}: Transaktionen mit Fallback-Methode abgerufen`);
+                } catch (fallbackError) {
+                    log(`Wallet ${walletId}: Auch Fallback fehlgeschlagen: ${fallbackError.message}`);
+                    document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}\nFallback Error: ${fallbackError.message}`;
+                }
             }
         }
 
