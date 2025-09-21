@@ -106,24 +106,6 @@
             max-height: 200px;
             overflow-y: auto;
         }
-        .nwc-link {
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 5px;
-            border-left: 4px solid #2196f3;
-            margin: 10px 0;
-        }
-        .qr-placeholder {
-            width: 200px;
-            height: 200px;
-            border: 2px dashed #ccc;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 20px auto;
-            border-radius: 5px;
-            color: #666;
-        }
     </style>
 </head>
 <body>
@@ -147,16 +129,6 @@
             </div>
         </div>
 
-        <!-- NWC Link Generator -->
-        <div class="demo-section">
-            <h2>NWC Link Generator</h2>
-            <p>Generiere einen NWC Link für Tests (Simulation):</p>
-            <button onclick="generateDemoLink()">Demo NWC Link Generieren</button>
-            <div id="nwc-link-display" class="nwc-link" style="display: none;">
-                <strong>Generated NWC Link:</strong><br>
-                <code id="generated-link"></code>
-            </div>
-        </div>
 
         <!-- Wallet Info -->
         <div class="demo-section">
@@ -178,14 +150,6 @@
             <div id="payment-result" class="result-display"></div>
         </div>
 
-        <!-- QR Code Simulation -->
-        <div class="demo-section">
-            <h2>QR Code (Simulation)</h2>
-            <div class="qr-placeholder" id="qr-display">
-                QR Code wird hier angezeigt
-            </div>
-            <button onclick="showQRCode()">QR Code für NWC Link anzeigen</button>
-        </div>
 
         <!-- Debug / Log Section -->
         <div class="demo-section">
@@ -274,13 +238,6 @@
             log('Wallet erfolgreich getrennt');
         }
 
-        function generateDemoLink() {
-            const demoLink = 'nostr+walletconnect://d4c4dfbe4a0e1a9a7a5a5f5e6e7d8c9b8a7b6c5d4e3f2g1h0?relay=wss://relay.damus.io&secret=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6';
-            document.getElementById('generated-link').textContent = demoLink;
-            document.getElementById('nwc-link-display').style.display = 'block';
-            document.getElementById('nwc-url').value = demoLink;
-            log('Demo NWC Link generiert (funktioniert nicht mit echten Wallets)');
-        }
 
         async function getWalletInfo() {
             if (!isConnected || !nwcClient) {
@@ -408,23 +365,6 @@
             }
         }
 
-        function showQRCode() {
-            const nwcUrl = document.getElementById('nwc-url').value;
-            const qrDisplay = document.getElementById('qr-display');
-
-            if (nwcUrl) {
-                // Use QR code library or show text representation
-                qrDisplay.innerHTML = `<div style="text-align: center;">
-                    <div style="background: #f0f0f0; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 10px; word-break: break-all;">
-                        ${nwcUrl}
-                    </div>
-                    <small>NWC Connection String<br>(Für echten QR Code, verwenden Sie eine QR-Bibliothek)</small>
-                </div>`;
-                log('NWC Connection String angezeigt');
-            } else {
-                alert('Bitte geben Sie zuerst einen NWC Link ein');
-            }
-        }
 
         function clearLog() {
             document.getElementById('debug-log').textContent = 'Debug-Nachrichten werden hier angezeigt...\n';
@@ -433,14 +373,12 @@
         // Make functions globally available
         window.connectWallet = connectWallet;
         window.disconnectWallet = disconnectWallet;
-        window.generateDemoLink = generateDemoLink;
         window.getWalletInfo = getWalletInfo;
         window.getBalance = getBalance;
         window.createInvoice = createInvoice;
         window.payInvoice = payInvoice;
         window.listTransactions = listTransactions;
         window.payKeysend = payKeysend;
-        window.showQRCode = showQRCode;
         window.clearLog = clearLog;
 
         // Initialize
