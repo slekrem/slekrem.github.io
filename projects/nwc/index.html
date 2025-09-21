@@ -130,6 +130,10 @@
                                 <button id="connect-btn-1" class="btn btn-primary flex-fill" onclick="connectWallet(1)">Verbinden</button>
                                 <button id="disconnect-btn-1" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(1)" disabled>Trennen</button>
                             </div>
+                            <div class="d-grid gap-2 d-md-flex mt-2">
+                                <button class="btn btn-outline-success btn-sm flex-fill" onclick="saveConnectionString(1)">💾 Speichern</button>
+                                <button class="btn btn-outline-danger btn-sm flex-fill" onclick="clearConnectionString(1)">🗑️ Löschen</button>
+                            </div>
                             <div class="mt-2">
                                 <span id="connection-status-1" class="badge bg-secondary status-badge">Nicht verbunden</span>
                             </div>
@@ -185,6 +189,10 @@
                             <div class="d-grid gap-2 d-md-flex">
                                 <button id="connect-btn-2" class="btn btn-primary flex-fill" onclick="connectWallet(2)">Verbinden</button>
                                 <button id="disconnect-btn-2" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(2)" disabled>Trennen</button>
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex mt-2">
+                                <button class="btn btn-outline-success btn-sm flex-fill" onclick="saveConnectionString(2)">💾 Speichern</button>
+                                <button class="btn btn-outline-danger btn-sm flex-fill" onclick="clearConnectionString(2)">🗑️ Löschen</button>
                             </div>
                             <div class="mt-2">
                                 <span id="connection-status-2" class="badge bg-secondary status-badge">Nicht verbunden</span>
@@ -257,6 +265,21 @@
         // Bitcoin Price functionality
         let priceUpdateInterval = null;
 
+        // Local Storage Functions
+        function saveNWCString(walletId, nwcUrl) {
+            localStorage.setItem(`nwc-wallet-${walletId}`, nwcUrl);
+            log(`Wallet ${walletId}: NWC String gespeichert`);
+        }
+
+        function loadNWCString(walletId) {
+            return localStorage.getItem(`nwc-wallet-${walletId}`) || '';
+        }
+
+        function clearNWCString(walletId) {
+            localStorage.removeItem(`nwc-wallet-${walletId}`);
+            log(`Wallet ${walletId}: Gespeicherter NWC String gelöscht`);
+        }
+
         function log(message) {
             const logElement = document.getElementById('debug-log');
             const timestamp = new Date().toLocaleTimeString();
@@ -300,6 +323,9 @@
                 updateConnectionStatus(walletId, 'connected', 'Verbunden');
                 document.getElementById(`connect-btn-${walletId}`).disabled = true;
                 document.getElementById(`disconnect-btn-${walletId}`).disabled = false;
+
+                // Auto-save connection string
+                saveNWCString(walletId, nwcUrl);
 
                 log(`Wallet ${walletId}: Erfolgreich verbunden!`);
                 log(`Wallet ${walletId}: Alias: ${info.alias || 'N/A'}`);
@@ -578,6 +604,32 @@
             }
         }
 
+        // Save/Load Connection String Functions
+        function saveConnectionString(walletId) {
+            const nwcUrl = document.getElementById(`nwc-url-${walletId}`).value;
+            if (!nwcUrl) {
+                alert('Kein Connection String zum Speichern vorhanden');
+                return;
+            }
+            saveNWCString(walletId, nwcUrl);
+        }
+
+        function clearConnectionString(walletId) {
+            clearNWCString(walletId);
+            document.getElementById(`nwc-url-${walletId}`).value = '';
+        }
+
+        function loadSavedConnectionStrings() {
+            // Load saved connection strings for both wallets
+            for (let walletId = 1; walletId <= 2; walletId++) {
+                const savedUrl = loadNWCString(walletId);
+                if (savedUrl) {
+                    document.getElementById(`nwc-url-${walletId}`).value = savedUrl;
+                    log(`Wallet ${walletId}: Gespeicherter NWC String geladen`);
+                }
+            }
+        }
+
         // Make functions globally available
         window.connectWallet = connectWallet;
         window.disconnectWallet = disconnectWallet;
@@ -591,6 +643,8 @@
         window.fetchBitcoinPrice = fetchBitcoinPrice;
         window.startPriceUpdates = startPriceUpdates;
         window.stopPriceUpdates = stopPriceUpdates;
+        window.saveConnectionString = saveConnectionString;
+        window.clearConnectionString = clearConnectionString;
 
         // Initialize
         window.addEventListener('load', () => {
@@ -600,6 +654,8 @@
 
             // Start Bitcoin price updates
             startPriceUpdates();
+            // Load saved connection strings
+            loadSavedConnectionStrings();
         });
     </script>
 </body>
