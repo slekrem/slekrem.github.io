@@ -56,6 +56,54 @@
             </div>
         </div>
 
+        <!-- Bitcoin Price Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">₿ Bitcoin Preis</h5>
+                        <div>
+                            <small class="text-muted me-3" id="price-updated">Letztes Update: --</small>
+                            <button class="btn btn-outline-primary btn-sm" onclick="fetchBitcoinPrice()">↻ Aktualisieren</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-2 col-6 mb-3">
+                                <div class="h4 text-success mb-1" id="price-usd">$ --</div>
+                                <small class="text-muted">USD</small>
+                            </div>
+                            <div class="col-md-2 col-6 mb-3">
+                                <div class="h4 text-primary mb-1" id="price-eur">€ --</div>
+                                <small class="text-muted">EUR</small>
+                            </div>
+                            <div class="col-md-2 col-6 mb-3">
+                                <div class="h4 text-info mb-1" id="price-gbp">£ --</div>
+                                <small class="text-muted">GBP</small>
+                            </div>
+                            <div class="col-md-2 col-6 mb-3">
+                                <div class="h4 text-warning mb-1" id="price-chf">₣ --</div>
+                                <small class="text-muted">CHF</small>
+                            </div>
+                            <div class="col-md-2 col-6 mb-3">
+                                <div class="h4 text-secondary mb-1" id="price-cad">C$ --</div>
+                                <small class="text-muted">CAD</small>
+                            </div>
+                            <div class="col-md-2 col-6 mb-3">
+                                <div class="h4 text-dark mb-1" id="price-jpy">¥ --</div>
+                                <small class="text-muted">JPY</small>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-12 text-center">
+                                <small class="text-muted">Preis aktualisiert sich alle 30 Sekunden automatisch | Quelle: mempool.space</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Two Wallet Columns -->
         <div class="row">
             <!-- Wallet 1 -->
@@ -199,6 +247,9 @@
             1: { isConnected: false, nwcClient: null, connectionData: null },
             2: { isConnected: false, nwcClient: null, connectionData: null }
         };
+
+        // Bitcoin Price functionality
+        let priceUpdateInterval = null;
 
         function log(message) {
             const logElement = document.getElementById('debug-log');
@@ -424,6 +475,92 @@
             document.getElementById('debug-log').textContent = 'Debug-Nachrichten werden hier angezeigt...\n';
         }
 
+        // Bitcoin Price Functions
+        async function fetchBitcoinPrice() {
+            try {
+                log('Bitcoin Preis wird abgerufen...');
+
+                const response = await fetch('https://mempool.space/api/v1/prices');
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const priceData = await response.json();
+
+                // Update price displays
+                updatePriceDisplay(priceData);
+
+                log('Bitcoin Preis erfolgreich aktualisiert');
+
+            } catch (error) {
+                log(`Fehler beim Abrufen des Bitcoin Preises: ${error.message}`);
+                console.error('Bitcoin price fetch error:', error);
+
+                // Update displays with error
+                const currencies = ['usd', 'eur', 'gbp', 'chf', 'cad', 'jpy'];
+                currencies.forEach(currency => {
+                    document.getElementById(`price-${currency}`).textContent = 'Error';
+                });
+                document.getElementById('price-updated').textContent = 'Letztes Update: Fehler';
+            }
+        }
+
+        function updatePriceDisplay(priceData) {
+            // Format and display prices
+            const currencies = {
+                usd: { symbol: '$', value: priceData.USD },
+                eur: { symbol: '€', value: priceData.EUR },
+                gbp: { symbol: '£', value: priceData.GBP },
+                chf: { symbol: '₣', value: priceData.CHF },
+                cad: { symbol: 'C$', value: priceData.CAD },
+                jpy: { symbol: '¥', value: priceData.JPY }
+            };
+
+            Object.entries(currencies).forEach(([currency, data]) => {
+                const element = document.getElementById(`price-${currency}`);
+                if (element && data.value) {
+                    // Format number with appropriate decimals
+                    const formattedValue = currency === 'jpy' ?
+                        Math.round(data.value).toLocaleString() :
+                        data.value.toLocaleString('de-DE', {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0
+                        });
+
+                    element.textContent = `${data.symbol} ${formattedValue}`;
+                }
+            });
+
+            // Update timestamp
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('de-DE');
+            document.getElementById('price-updated').textContent = `Letztes Update: ${timeString}`;
+        }
+
+        function startPriceUpdates() {
+            // Clear existing interval
+            if (priceUpdateInterval) {
+                clearInterval(priceUpdateInterval);
+            }
+
+            // Fetch price immediately
+            fetchBitcoinPrice();
+
+            // Set up auto-refresh every 30 seconds
+            priceUpdateInterval = setInterval(fetchBitcoinPrice, 30000);
+
+            log('Bitcoin Preis Auto-Update gestartet (alle 30 Sekunden)');
+        }
+
+        function stopPriceUpdates() {
+            if (priceUpdateInterval) {
+                clearInterval(priceUpdateInterval);
+                priceUpdateInterval = null;
+                log('Bitcoin Preis Auto-Update gestoppt');
+            }
+        }
+
         // Make functions globally available
         window.connectWallet = connectWallet;
         window.disconnectWallet = disconnectWallet;
@@ -434,12 +571,18 @@
         window.listTransactions = listTransactions;
         window.payKeysend = payKeysend;
         window.clearLog = clearLog;
+        window.fetchBitcoinPrice = fetchBitcoinPrice;
+        window.startPriceUpdates = startPriceUpdates;
+        window.stopPriceUpdates = stopPriceUpdates;
 
         // Initialize
         window.addEventListener('load', () => {
             log('NWC Demo Seite geladen');
             log('ECHTE NWC INTEGRATION mit lokalen Dependencies - Verwenden Sie echte Wallet Connection Strings!');
             log('Unterstützte Wallets: Alby Hub, Coinos, Primal, lnwallet.app, Yakihonne...');
+
+            // Start Bitcoin price updates
+            startPriceUpdates();
         });
     </script>
 </body>
