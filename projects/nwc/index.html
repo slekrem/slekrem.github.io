@@ -345,6 +345,7 @@
                                         </div>
                                     </div>
                                 </div>
+
                             </div>
 
                             <!-- Wallet 2 - Target Wallet -->
@@ -359,6 +360,44 @@
                                             <div class="text-center text-muted py-3">
                                                 <i class="fas fa-info-circle"></i>
                                                 <div>Wallet 2 verbinden um Daten anzuzeigen</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <!-- Transactions Row -->
+                        <div class="row mt-3">
+                            <!-- Wallet 1 Transactions -->
+                            <div class="col-md-6">
+                                <div class="card border-primary">
+                                    <div class="card-header bg-light">
+                                        <h6 class="card-title mb-0 text-primary">📄 Wallet 1 Transaktionen</h6>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div id="wallet1-transactions" class="wallet-transactions" style="max-height: 300px; overflow-y: auto;">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-info-circle"></i>
+                                                <div>Wallet 1 verbinden um Transaktionen anzuzeigen</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Wallet 2 Transactions -->
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-light">
+                                        <h6 class="card-title mb-0 text-success">📄 Wallet 2 Transaktionen</h6>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div id="wallet2-transactions" class="wallet-transactions" style="max-height: 300px; overflow-y: auto;">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-info-circle"></i>
+                                                <div>Wallet 2 verbinden um Transaktionen anzuzeigen</div>
                                             </div>
                                         </div>
                                     </div>
@@ -413,8 +452,8 @@
 
         // Real NWC functionality using @getalby/sdk - Dual Wallet Support
         const wallets = {
-            1: { isConnected: false, nwcClient: null, connectionData: null },
-            2: { isConnected: false, nwcClient: null, connectionData: null }
+            1: { isConnected: false, nwcClient: null, connectionData: null, transactionsSupported: null },
+            2: { isConnected: false, nwcClient: null, connectionData: null, transactionsSupported: null }
         };
 
         // Bitcoin Price functionality
@@ -682,6 +721,7 @@
             wallets[walletId].isConnected = false;
             wallets[walletId].nwcClient = null;
             wallets[walletId].connectionData = null;
+            wallets[walletId].transactionsSupported = null; // Reset transaction support flag
             updateConnectionStatus(walletId, 'disconnected', 'Nicht verbunden');
 
             // Re-enable connection form when disconnected
@@ -1411,6 +1451,9 @@
             await updateSingleWalletDisplay(1);
             // Update Wallet 2 display
             await updateSingleWalletDisplay(2);
+            // Update transaction displays
+            await updateWalletTransactions(1);
+            await updateWalletTransactions(2);
         }
 
         async function updateSingleWalletDisplay(walletId) {
@@ -1505,6 +1548,183 @@
                         <small>${error.message}</small>
                     </div>
                 `;
+            }
+        }
+
+        async function updateWalletTransactions(walletId) {
+            const transactionsElement = document.getElementById(`wallet${walletId}-transactions`);
+
+            if (!wallets[walletId].isConnected) {
+                transactionsElement.innerHTML = `
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-info-circle"></i>
+                        <div>Wallet ${walletId} verbinden um Transaktionen anzuzeigen</div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Check if we already know transactions are not supported
+            if (wallets[walletId].transactionsSupported === false) {
+                transactionsElement.innerHTML = `
+                    <div class="text-center text-warning py-3">
+                        <i class="fas fa-clock"></i>
+                        <div>Transaktionen nicht verfügbar</div>
+                        <small class="text-muted">NWC Provider unterstützt diese Funktion nicht</small>
+                    </div>
+                `;
+                return;
+            }
+
+            // Show loading state only on first attempt
+            if (wallets[walletId].transactionsSupported === null) {
+                transactionsElement.innerHTML = `
+                    <div class="text-center text-muted py-3">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        <div>Transaktionen werden geladen...</div>
+                    </div>
+                `;
+            }
+
+            try {
+                // Use the existing working listTransactions logic
+                const transactionResponse = await wallets[walletId].nwcClient.listTransactions({
+                    from: 0,
+                    until: Math.floor(Date.now() / 1000),
+                    limit: 10, // Only get last 10 for the UI
+                    offset: 0,
+                    unpaid: false,
+                    type: undefined
+                });
+
+                let transactions = transactionResponse.transactions || transactionResponse;
+
+                // If that fails, try without parameters as fallback
+                if (!transactions || transactions.length === 0) {
+                    const fallbackResponse = await wallets[walletId].nwcClient.listTransactions({});
+                    transactions = fallbackResponse.transactions || fallbackResponse;
+                }
+
+                // Mark as supported if we get here
+                wallets[walletId].transactionsSupported = true;
+
+                if (!transactions || transactions.length === 0) {
+                    transactionsElement.innerHTML = `
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-inbox"></i>
+                            <div>Keine Transaktionen gefunden</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Sort transactions by date (newest first) and limit to last 10
+                const sortedTransactions = transactions
+                    .sort((a, b) => b.created_at - a.created_at)
+                    .slice(0, 10);
+
+                let transactionHtml = '';
+                sortedTransactions.forEach(tx => {
+                    const date = new Date(tx.created_at * 1000);
+                    const amountSats = Math.round(tx.amount / 1000); // Convert millisats to sats
+                    const txType = tx.type || 'payment';
+
+                    // Determine if transaction is incoming or outgoing
+                    let isIncoming = false;
+                    let icon = '💸';
+                    let colorClass = 'text-danger';
+                    let typeText = 'Ausgehend';
+
+                    // Check transaction type first, then amount as fallback
+                    if (txType === 'incoming') {
+                        isIncoming = true;
+                        icon = '📥';
+                        colorClass = 'text-success';
+                        typeText = 'Empfangen';
+                    } else if (txType === 'outgoing') {
+                        isIncoming = false;
+                        icon = '📤';
+                        colorClass = 'text-danger';
+                        typeText = 'Gesendet';
+                    } else {
+                        // Fallback: use amount sign to determine direction
+                        isIncoming = amountSats > 0;
+                        if (isIncoming) {
+                            icon = '💰';
+                            colorClass = 'text-success';
+                            typeText = 'Eingehend';
+                        }
+                    }
+
+                    // Format description
+                    let description = tx.description || tx.memo || 'Keine Beschreibung';
+                    if (description.length > 40) {
+                        description = description.substring(0, 40) + '...';
+                    }
+
+                    transactionHtml += `
+                        <div class="border-bottom px-3 py-2">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <div class="d-flex align-items-center">
+                                    <span class="me-2">${icon}</span>
+                                    <div>
+                                        <div class="small fw-bold ${colorClass}">
+                                            ${isIncoming ? '+' : '-'}${Math.abs(amountSats).toLocaleString()} sats
+                                        </div>
+                                        <div class="text-muted" style="font-size: 0.75rem;">
+                                            ${typeText}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="text-muted small">
+                                        ${date.toLocaleString('de-DE', {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="small text-muted" style="font-size: 0.75rem;">
+                                ${description}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                transactionsElement.innerHTML = transactionHtml;
+
+            } catch (error) {
+                console.warn(`Wallet ${walletId} transactions error:`, error.message);
+
+                // Determine if it's a timeout or other error
+                const isTimeout = error.message.includes('Timeout') || error.message.includes('reply timeout');
+
+                if (isTimeout) {
+                    // Mark transactions as unsupported for this wallet
+                    wallets[walletId].transactionsSupported = false;
+
+                    transactionsElement.innerHTML = `
+                        <div class="text-center text-warning py-3">
+                            <i class="fas fa-clock"></i>
+                            <div>Transaktionen nicht verfügbar</div>
+                            <small class="text-muted">NWC Provider unterstützt diese Funktion nicht</small>
+                        </div>
+                    `;
+                } else {
+                    // For non-timeout errors, still mark as unsupported to avoid retries
+                    wallets[walletId].transactionsSupported = false;
+
+                    transactionsElement.innerHTML = `
+                        <div class="text-center text-danger py-3">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <div>Fehler beim Laden der Transaktionen</div>
+                            <small class="text-muted">${error.message}</small>
+                        </div>
+                    `;
+                }
             }
         }
 
