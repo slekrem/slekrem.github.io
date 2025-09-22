@@ -1223,19 +1223,24 @@
                         x: {
                             type: 'linear',
                             position: 'bottom',
+                            min: function(context) {
+                                const data = context.chart.data.labels;
+                                return data.length > 0 ? Math.min(...data) : 0;
+                            },
+                            max: function(context) {
+                                const data = context.chart.data.labels;
+                                return data.length > 0 ? Math.max(...data) : 0;
+                            },
                             grid: {
                                 color: 'rgba(0, 0, 0, 0.1)'
                             },
                             ticks: {
-                                callback: function(value, index) {
-                                    if (this.chart.data.labels[index]) {
-                                        const date = new Date(this.chart.data.labels[index]);
-                                        return date.toLocaleTimeString('de-DE', {
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        });
-                                    }
-                                    return '';
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    return date.toLocaleTimeString('de-DE', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    });
                                 },
                                 maxTicksLimit: 8
                             }
