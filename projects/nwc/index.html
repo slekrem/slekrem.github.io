@@ -289,7 +289,8 @@
                         <small class="text-muted">Automatische Währungsstabilisierung zwischen Wallet 1 & 2</small>
                     </div>
                     <div class="card-body">
-                        <div class="row">
+                        <!-- Control Section -->
+                        <div class="row mb-4">
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="stabilization-currency" class="form-label">Zielwährung auswählen:</label>
@@ -303,6 +304,18 @@
                                         <option value="jpy">JPY (¥)</option>
                                     </select>
                                 </div>
+                                <div class="mb-3">
+                                    <div id="stabilization-status" class="alert alert-secondary py-3 px-3">
+                                        Status: Nicht aktiv
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="rebalance-threshold" class="form-label small">Rebalancing Threshold (Sats):</label>
+                                    <input type="number" id="rebalance-threshold" class="form-control form-control-sm" value="1" min="1" max="1000">
+                                    <small class="text-muted">Minimale Differenz für automatisches Rebalancing</small>
+                                </div>
                                 <div class="d-grid gap-2">
                                     <button id="start-stabilization" class="btn btn-success" onclick="startStabilization()" disabled>
                                         🎯 Stabilisierung Starten
@@ -312,33 +325,64 @@
                                     </button>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Dual Wallet Display -->
+                        <div class="row">
+                            <!-- Wallet 1 - Source Wallet -->
                             <div class="col-md-6">
-                                <div class="mb-3">
-                                    <div id="stabilization-status" class="alert alert-secondary py-3 px-3 mb-3">
-                                        Status: Nicht aktiv
+                                <div class="card border-primary">
+                                    <div class="card-header bg-primary text-white">
+                                        <h6 class="card-title mb-0">💰 Wallet 1 (Quelle)</h6>
+                                        <small>Liquiditäts-Provider für Rebalancing</small>
                                     </div>
-                                    <div id="stabilization-info" class="small text-muted bg-light p-3 rounded" style="min-height: 120px;"></div>
+                                    <div class="card-body">
+                                        <div id="wallet1-stabilization-info" class="stabilization-wallet-info">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-info-circle"></i>
+                                                <div>Wallet 1 verbinden um Daten anzuzeigen</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="mb-3">
-                                    <label for="rebalance-threshold" class="form-label small">Rebalancing Threshold (Sats):</label>
-                                    <input type="number" id="rebalance-threshold" class="form-control form-control-sm" value="1" min="1" max="1000">
-                                    <small class="text-muted">Minimale Differenz für automatisches Rebalancing</small>
+                            </div>
+
+                            <!-- Wallet 2 - Target Wallet -->
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="card-title mb-0">🎯 Wallet 2 (Ziel)</h6>
+                                        <small>Stabilisierte Wallet</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="wallet2-stabilization-info" class="stabilization-wallet-info">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-info-circle"></i>
+                                                <div>Wallet 2 verbinden um Daten anzuzeigen</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Info Section -->
                         <div class="row mt-3">
                             <div class="col-12">
                                 <div class="alert alert-info py-2 px-3">
                                     <small>
                                         <strong>📋 Funktionsweise:</strong>
                                         Wallet 2 Balance wird in der gewählten Währung stabilisiert.
-                                        Bei Preisänderungen erfolgt automatisches Rebalancing zwischen beiden Wallets (alle 10 Sekunden).
+                                        Bei Preisänderungen erfolgt automatisches Rebalancing zwischen beiden Wallets.
                                         <br>
                                         <strong>📋 Voraussetzung:</strong> Beide Wallets müssen verbunden sein.
                                     </small>
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Legacy Info Section (Hidden) -->
+                        <div id="stabilization-info" style="display: none;"></div>
                     </div>
                 </div>
             </div>
@@ -1180,6 +1224,9 @@
                 // Update status display
                 updateStabilizationStatus(currentBalance, currentValue, requiredBalance, difference);
 
+                // Update wallet displays
+                updateWalletStabilizationDisplay();
+
                 // Check if rebalancing is needed and allowed
                 const now = Date.now();
                 const timeSinceLastRebalance = now - stabilizationData.lastRebalanceTime;
@@ -1313,13 +1360,16 @@
             const currencySelect = document.getElementById('stabilization-currency');
             const startBtn = document.getElementById('start-stabilization');
             const stopBtn = document.getElementById('stop-stabilization');
+            const thresholdInput = document.getElementById('rebalance-threshold');
 
             if (stabilizationData.active) {
                 currencySelect.disabled = true;
+                thresholdInput.disabled = true;
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
             } else {
                 currencySelect.disabled = false;
+                thresholdInput.disabled = false;
                 startBtn.disabled = !currencySelect.value || !wallets[1].isConnected || !wallets[2].isConnected;
                 stopBtn.disabled = true;
             }
@@ -1353,6 +1403,109 @@
         // Update stabilization UI when wallet connections change
         function updateStabilizationUIOnConnect() {
             updateStabilizationUI();
+            updateWalletStabilizationDisplay();
+        }
+
+        async function updateWalletStabilizationDisplay() {
+            // Update Wallet 1 display
+            await updateSingleWalletDisplay(1);
+            // Update Wallet 2 display
+            await updateSingleWalletDisplay(2);
+        }
+
+        async function updateSingleWalletDisplay(walletId) {
+            const infoElement = document.getElementById(`wallet${walletId}-stabilization-info`);
+
+            if (!wallets[walletId].isConnected) {
+                infoElement.innerHTML = `
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-info-circle"></i>
+                        <div>Wallet ${walletId} verbinden um Daten anzuzeigen</div>
+                    </div>
+                `;
+                return;
+            }
+
+            try {
+                // Get wallet balance
+                const balanceResponse = await wallets[walletId].nwcClient.getBalance();
+                const balanceSats = Math.round(balanceResponse.balance / 1000);
+
+                // Get current Bitcoin price
+                const priceResponse = await fetch('https://mempool.space/api/v1/prices');
+                const priceData = await priceResponse.json();
+
+                // Calculate values for different currencies
+                const currencies = {
+                    USD: { symbol: '$', value: priceData.USD },
+                    EUR: { symbol: '€', value: priceData.EUR },
+                    GBP: { symbol: '£', value: priceData.GBP },
+                    CHF: { symbol: '₣', value: priceData.CHF },
+                    CAD: { symbol: 'C$', value: priceData.CAD },
+                    JPY: { symbol: '¥', value: priceData.JPY }
+                };
+
+                let currencyDisplays = '';
+                Object.entries(currencies).forEach(([code, data]) => {
+                    const value = (balanceSats / 100000000) * data.value;
+                    currencyDisplays += `
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="small">${code}:</span>
+                            <span class="small fw-bold">${data.symbol}${value.toFixed(2)}</span>
+                        </div>
+                    `;
+                });
+
+                // Show stabilization status for Wallet 2
+                let stabilizationStatus = '';
+                if (walletId === 2 && stabilizationData.active) {
+                    const targetCurrency = stabilizationData.currency.toUpperCase();
+                    const currentValue = (balanceSats / 100000000) * currencies[targetCurrency].value;
+                    const targetValue = stabilizationData.targetValue;
+                    const difference = currentValue - targetValue;
+
+                    stabilizationStatus = `
+                        <div class="border-top pt-2 mt-2">
+                            <div class="small text-success">
+                                <strong>🎯 Stabilisierung aktiv (${targetCurrency})</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="small">Zielwert:</span>
+                                <span class="small">${currencies[targetCurrency].symbol}${targetValue.toFixed(2)}</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="small">Differenz:</span>
+                                <span class="small ${difference >= 0 ? 'text-success' : 'text-danger'}">
+                                    ${difference >= 0 ? '+' : ''}${currencies[targetCurrency].symbol}${difference.toFixed(2)}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                infoElement.innerHTML = `
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="fw-bold">Balance:</span>
+                            <span class="fw-bold text-primary">${balanceSats.toLocaleString()} sats</span>
+                        </div>
+                        <div class="border-top pt-2">
+                            <div class="small text-muted mb-1">Währungswerte:</div>
+                            ${currencyDisplays}
+                        </div>
+                        ${stabilizationStatus}
+                    </div>
+                `;
+
+            } catch (error) {
+                infoElement.innerHTML = `
+                    <div class="text-center text-danger py-3">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <div>Fehler beim Laden der Wallet-Daten</div>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            }
         }
 
         // Chart Functions
