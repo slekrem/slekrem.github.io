@@ -160,7 +160,12 @@
                             <h5 class="card-subtitle mb-3">Verbindung</h5>
                             <div class="mb-3">
                                 <label for="nwc-url-1" class="form-label">NWC Connection String:</label>
-                                <textarea id="nwc-url-1" class="form-control" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3"></textarea>
+                                <div class="input-group">
+                                    <textarea id="nwc-url-1" class="form-control" type="password" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3" style="-webkit-text-security: disc; font-family: monospace;"></textarea>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleConnectionVisibility(1)" id="toggle-visibility-1">
+                                        👁️
+                                    </button>
+                                </div>
                             </div>
                             <div class="d-grid gap-2 d-md-flex">
                                 <button id="connect-btn-1" class="btn btn-primary flex-fill" onclick="connectWallet(1)">Verbinden</button>
@@ -220,7 +225,12 @@
                             <h5 class="card-subtitle mb-3">Verbindung</h5>
                             <div class="mb-3">
                                 <label for="nwc-url-2" class="form-label">NWC Connection String:</label>
-                                <textarea id="nwc-url-2" class="form-control" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3"></textarea>
+                                <div class="input-group">
+                                    <textarea id="nwc-url-2" class="form-control" type="password" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3" style="-webkit-text-security: disc; font-family: monospace;"></textarea>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleConnectionVisibility(2)" id="toggle-visibility-2">
+                                        👁️
+                                    </button>
+                                </div>
                             </div>
                             <div class="d-grid gap-2 d-md-flex">
                                 <button id="connect-btn-2" class="btn btn-primary flex-fill" onclick="connectWallet(2)">Verbinden</button>
@@ -506,6 +516,25 @@
             log('Preis-Historie gelöscht');
         }
 
+        function toggleConnectionVisibility(walletId) {
+            const textarea = document.getElementById(`nwc-url-${walletId}`);
+            const toggleBtn = document.getElementById(`toggle-visibility-${walletId}`);
+
+            const isHidden = textarea.style.webkitTextSecurity === 'disc';
+
+            if (isHidden) {
+                // Show text
+                textarea.style.webkitTextSecurity = 'none';
+                toggleBtn.textContent = '🙈';
+                toggleBtn.title = 'Connection String verstecken';
+            } else {
+                // Hide text
+                textarea.style.webkitTextSecurity = 'disc';
+                toggleBtn.textContent = '👁️';
+                toggleBtn.title = 'Connection String anzeigen';
+            }
+        }
+
         async function clearAndReloadPriceData() {
             try {
                 log('🗑️ Lösche alle Preisdaten...');
@@ -576,6 +605,10 @@
                 wallets[walletId].isConnected = true;
                 wallets[walletId].connectionData = { url: nwcUrl };
                 updateConnectionStatus(walletId, 'connected', 'Verbunden');
+
+                // Disable connection form when connected
+                document.getElementById(`nwc-url-${walletId}`).disabled = true;
+                document.getElementById(`toggle-visibility-${walletId}`).disabled = true;
                 document.getElementById(`connect-btn-${walletId}`).disabled = true;
                 document.getElementById(`disconnect-btn-${walletId}`).disabled = false;
 
@@ -606,6 +639,10 @@
             wallets[walletId].nwcClient = null;
             wallets[walletId].connectionData = null;
             updateConnectionStatus(walletId, 'disconnected', 'Nicht verbunden');
+
+            // Re-enable connection form when disconnected
+            document.getElementById(`nwc-url-${walletId}`).disabled = false;
+            document.getElementById(`toggle-visibility-${walletId}`).disabled = false;
             document.getElementById(`connect-btn-${walletId}`).disabled = false;
             document.getElementById(`disconnect-btn-${walletId}`).disabled = true;
             document.getElementById(`wallet-info-${walletId}`).textContent = '';
@@ -1556,7 +1593,10 @@
             for (let walletId = 1; walletId <= 2; walletId++) {
                 const savedUrl = loadNWCString(walletId);
                 if (savedUrl) {
-                    document.getElementById(`nwc-url-${walletId}`).value = savedUrl;
+                    const textarea = document.getElementById(`nwc-url-${walletId}`);
+                    textarea.value = savedUrl;
+                    // Ensure the text is properly masked
+                    textarea.style.webkitTextSecurity = 'disc';
                     log(`Wallet ${walletId}: Gespeicherter NWC String geladen`);
                 }
             }
@@ -1582,6 +1622,7 @@
         window.fetchHistoricalPrices = fetchHistoricalPrices;
         window.updatePriceChart = updatePriceChart;
         window.clearAndReloadPriceData = clearAndReloadPriceData;
+        window.toggleConnectionVisibility = toggleConnectionVisibility;
 
         // Initialize
         window.addEventListener('load', () => {
