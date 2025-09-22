@@ -1288,15 +1288,15 @@
             }
 
             // Prepare data for chart
-            const labels = history.map((item, index) => index);
+            const labels = history.map(item => item.timestamp);
             const currencies = ['USD', 'EUR', 'GBP', 'CHF', 'CAD', 'JPY'];
 
             // Update chart data
             priceChart.data.labels = labels;
 
             currencies.forEach((currency, index) => {
-                const dataPoints = history.map((item, historyIndex) => ({
-                    x: historyIndex,
+                const dataPoints = history.map((item) => ({
+                    x: item.timestamp,
                     y: item.prices[currency]
                 }));
                 priceChart.data.datasets[index].data = dataPoints;
