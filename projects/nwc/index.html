@@ -1,392 +1,434 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
+<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NWC Demo - Nostr Wallet Connect</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background: #f5f5f5;
-        }
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .demo-section {
-            margin: 20px 0;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: #fafafa;
-        }
-        .connection-form {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .connection-form input, .connection-form textarea {
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-        .connection-form button {
-            background: #0066cc;
-            color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        .connection-form button:hover {
-            background: #0052a3;
-        }
-        .connection-form button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-        .status {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-        .status.connected {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .status.disconnected {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .status.connecting {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
-        .wallet-actions {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .wallet-actions button {
-            padding: 10px;
-            border: 1px solid #0066cc;
-            background: white;
-            color: #0066cc;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .wallet-actions button:hover {
-            background: #0066cc;
-            color: white;
-        }
-        .result-display {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
-            margin: 10px 0;
-            font-family: monospace;
-            white-space: pre-wrap;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-    </style>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/nwc.1303bb05.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
+
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🔗 Nostr Wallet Connect Demo</h1>
-            <p>Experimentiere mit NWC (Nostr Wallet Connect) Funktionen</p>
-        </div>
-
-        <!-- Connection Section -->
-        <div class="demo-section">
-            <h2>Wallet Verbindung</h2>
-            <div class="connection-form">
-                <label for="nwc-url">NWC Connection String:</label>
-                <textarea id="nwc-url" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3"></textarea>
-                <button id="connect-btn" onclick="connectWallet()">Wallet Verbinden</button>
-                <button id="disconnect-btn" onclick="disconnectWallet()" disabled>Verbindung Trennen</button>
-            </div>
-            <div id="connection-status" class="status disconnected">
-                Status: Nicht verbunden
+    <div class="container py-4">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-12 text-center">
+                <h1 class="display-5 fw-bold text-primary">🔗 Nostr Wallet Connect Demo</h1>
+                <p class="lead">Experiment with two NWC (Nostr Wallet Connect) wallets simultaneously</p>
             </div>
         </div>
 
-
-        <!-- Wallet Info -->
-        <div class="demo-section">
-            <h2>Wallet Information</h2>
-            <button onclick="getWalletInfo()">get_info</button>
-            <button onclick="getBalance()">get_balance</button>
-            <div id="wallet-info" class="result-display"></div>
-        </div>
-
-        <!-- Payment Actions -->
-        <div class="demo-section">
-            <h2>Payment Aktionen</h2>
-            <div class="wallet-actions">
-                <button onclick="createInvoice()">Invoice Erstellen</button>
-                <button onclick="payInvoice()">Invoice Bezahlen</button>
-                <button onclick="listTransactions()">Transaktionen Anzeigen</button>
-                <button onclick="payKeysend()">Keysend Payment</button>
+        <!-- Educational Disclaimer -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="alert alert-warning border-warning" role="alert">
+                    <h5 class="alert-heading mb-2">⚠️ Educational Project Only</h5>
+                    <p class="mb-0 small">This is a demonstration project created for educational purposes to showcase Nostr Wallet Connect (NWC) functionality. Use only with test wallets and small amounts. Not intended for production use.</p>
+                </div>
             </div>
-            <div id="payment-result" class="result-display"></div>
         </div>
 
+        <!-- Bitcoin Price Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">₿ Bitcoin Price</h5>
+                        <div>
+                            <small class="text-muted me-3" id="price-updated">Last Update: --</small>
+                            <button class="btn btn-outline-primary btn-sm" onclick="fetchBitcoinPrice()">↻
+                                Refresh</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
+                                <div class="h4 text-success mb-1" id="price-usd">$ --</div>
+                                <small class="text-muted d-block">USD</small>
+                                <small class="text-success" id="sats-usd">-- sats = $1</small>
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
+                                <div class="h4 text-primary mb-1" id="price-eur">€ --</div>
+                                <small class="text-muted d-block">EUR</small>
+                                <small class="text-primary" id="sats-eur">-- sats = €1</small>
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
+                                <div class="h4 text-info mb-1" id="price-gbp">£ --</div>
+                                <small class="text-muted d-block">GBP</small>
+                                <small class="text-info" id="sats-gbp">-- sats = £1</small>
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
+                                <div class="h4 text-warning mb-1" id="price-chf">₣ --</div>
+                                <small class="text-muted d-block">CHF</small>
+                                <small class="text-warning" id="sats-chf">-- sats = ₣1</small>
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
+                                <div class="h4 text-secondary mb-1" id="price-cad">C$ --</div>
+                                <small class="text-muted d-block">CAD</small>
+                                <small class="text-secondary" id="sats-cad">-- sats = C$1</small>
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-6 mb-3">
+                                <div class="h4 text-dark mb-1" id="price-jpy">¥ --</div>
+                                <small class="text-muted d-block">JPY</small>
+                                <small class="text-dark" id="sats-jpy">-- sats = ¥1</small>
+                            </div>
+                        </div>
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">📈 Price History (all currencies)</h6>
+                                    <div class="d-flex gap-2">
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <input type="radio" class="btn-check" name="timeRange" id="range-12h" value="12h" checked="" onchange="updatePriceChart()">
+                                            <label class="btn btn-outline-primary" for="range-12h">12h</label>
+
+                                            <input type="radio" class="btn-check" name="timeRange" id="range-24h" value="24h" onchange="updatePriceChart()">
+                                            <label class="btn btn-outline-primary" for="range-24h">24h</label>
+
+                                            <input type="radio" class="btn-check" name="timeRange" id="range-2d" value="2d" onchange="updatePriceChart()">
+                                            <label class="btn btn-outline-primary" for="range-2d">2d</label>
+
+                                            <input type="radio" class="btn-check" name="timeRange" id="range-4d" value="4d" onchange="updatePriceChart()">
+                                            <label class="btn btn-outline-primary" for="range-4d">4d</label>
+
+                                            <input type="radio" class="btn-check" name="timeRange" id="range-7d" value="7d" onchange="updatePriceChart()">
+                                            <label class="btn btn-outline-primary" for="range-7d">7d</label>
+                                        </div>
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="fetchHistoricalPrices()" title="Load 7-day test data">
+                                            🔄
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="clearAndReloadPriceData()" title="Clear all price data and reload">
+                                            🗑️
+                                        </button>
+                                    </div>
+                                </div>
+                                <div style="aspect-ratio: 32 / 9; width: 100%; position: relative">
+                                    <canvas id="priceChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-12 text-center">
+                                <small class="text-muted">Price updates automatically every 30 seconds | Source:
+                                    mempool.space</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Two Wallet Columns -->
+        <div class="row">
+            <!-- Stability Provider -->
+            <div class="col-lg-6 mb-4">
+                <div class="wallet-card card h-100">
+                    <div class="card-header text-center">
+                        <h3 class="card-title mb-0">💰 Stability Provider</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- Connection Section -->
+                        <div class="mb-4">
+                            <h5 class="card-subtitle mb-3">Connection</h5>
+                            <div class="mb-3">
+                                <label for="nwc-url-1" class="form-label">NWC Connection String:</label>
+                                <div class="input-group">
+                                    <textarea id="nwc-url-1" class="form-control" type="password" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&amp;secret=secret..." rows="3" style="-webkit-text-security: disc; font-family: monospace"></textarea>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleConnectionVisibility(1)" id="toggle-visibility-1">
+                                        👁️
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex">
+                                <button id="connect-btn-1" class="btn btn-primary flex-fill" onclick="connectWallet(1)">Connect</button>
+                                <button id="disconnect-btn-1" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(1)" disabled="">Disconnect</button>
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex mt-2">
+                                <button class="btn btn-outline-success btn-sm flex-fill" onclick="saveConnectionString(1)">💾 Save</button>
+                                <button class="btn btn-outline-danger btn-sm flex-fill" onclick="clearConnectionString(1)">🗑️ Clear</button>
+                            </div>
+                            <div class="mt-2">
+                                <span id="connection-status-1" class="badge bg-secondary status-badge">Not
+                                    connected</span>
+                            </div>
+                        </div>
+
+                        <!-- Wallet Info -->
+                        <div class="mb-4">
+                            <h5 class="card-subtitle mb-3">Wallet Information</h5>
+                            <div class="d-grid gap-2 d-md-flex mb-2">
+                                <button class="btn btn-outline-info btn-sm flex-fill" onclick="getWalletInfo(1)">get_info</button>
+                                <button class="btn btn-outline-info btn-sm flex-fill" onclick="getBalance(1)">get_balance</button>
+                            </div>
+                            <div id="wallet-info-1" class="result-display"></div>
+                        </div>
+
+                        <!-- Payment Actions -->
+                        <div class="mb-3">
+                            <h5 class="card-subtitle mb-3">Payment Actions</h5>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <button class="btn btn-success btn-sm w-100" onclick="createInvoice(1)">Create
+                                        Invoice</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-warning btn-sm w-100" onclick="payInvoice(1)">Pay
+                                        Invoice</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-info btn-sm w-100" onclick="listTransactions(1)">Transactions</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-secondary btn-sm w-100" onclick="payKeysend(1)">Keysend</button>
+                                </div>
+                            </div>
+                            <div id="payment-result-1" class="result-display"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stability Receiver -->
+            <div class="col-lg-6 mb-4">
+                <div class="wallet-card card h-100">
+                    <div class="card-header text-center">
+                        <h3 class="card-title mb-0">💳 Stability Receiver</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- Connection Section -->
+                        <div class="mb-4">
+                            <h5 class="card-subtitle mb-3">Connection</h5>
+                            <div class="mb-3">
+                                <label for="nwc-url-2" class="form-label">NWC Connection String:</label>
+                                <div class="input-group">
+                                    <textarea id="nwc-url-2" class="form-control" type="password" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&amp;secret=secret..." rows="3" style="-webkit-text-security: disc; font-family: monospace"></textarea>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleConnectionVisibility(2)" id="toggle-visibility-2">
+                                        👁️
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex">
+                                <button id="connect-btn-2" class="btn btn-primary flex-fill" onclick="connectWallet(2)">Connect</button>
+                                <button id="disconnect-btn-2" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(2)" disabled="">Disconnect</button>
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex mt-2">
+                                <button class="btn btn-outline-success btn-sm flex-fill" onclick="saveConnectionString(2)">💾 Save</button>
+                                <button class="btn btn-outline-danger btn-sm flex-fill" onclick="clearConnectionString(2)">🗑️ Clear</button>
+                            </div>
+                            <div class="mt-2">
+                                <span id="connection-status-2" class="badge bg-secondary status-badge">Not
+                                    connected</span>
+                            </div>
+                        </div>
+
+                        <!-- Wallet Info -->
+                        <div class="mb-4">
+                            <h5 class="card-subtitle mb-3">Wallet Information</h5>
+                            <div class="d-grid gap-2 d-md-flex mb-2">
+                                <button class="btn btn-outline-info btn-sm flex-fill" onclick="getWalletInfo(2)">get_info</button>
+                                <button class="btn btn-outline-info btn-sm flex-fill" onclick="getBalance(2)">get_balance</button>
+                            </div>
+                            <div id="wallet-info-2" class="result-display"></div>
+                        </div>
+
+                        <!-- Payment Actions -->
+                        <div class="mb-4">
+                            <h5 class="card-subtitle mb-3">Payment Actions</h5>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <button class="btn btn-success btn-sm w-100" onclick="createInvoice(2)">Create
+                                        Invoice</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-warning btn-sm w-100" onclick="payInvoice(2)">Pay
+                                        Invoice</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-info btn-sm w-100" onclick="listTransactions(2)">Transactions</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-secondary btn-sm w-100" onclick="payKeysend(2)">Keysend</button>
+                                </div>
+                            </div>
+                            <div id="payment-result-2" class="result-display"></div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Balance Stabilization Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header text-center">
+                        <h4 class="card-title mb-0">💱 Balance Stabilization</h4>
+                        <small class="text-muted">Automatic currency stabilization between Stability Provider &amp;
+                            Receiver</small>
+                    </div>
+                    <div class="card-body">
+                        <!-- Control Section -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="stabilization-currency" class="form-label">Select target
+                                        currency:</label>
+                                    <select id="stabilization-currency" class="form-select">
+                                        <option value="">-- Choose currency --</option>
+                                        <option value="usd">USD ($)</option>
+                                        <option value="eur">EUR (€)</option>
+                                        <option value="gbp">GBP (£)</option>
+                                        <option value="chf">CHF (₣)</option>
+                                        <option value="cad">CAD (C$)</option>
+                                        <option value="jpy">JPY (¥)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <div id="stabilization-status" class="alert alert-secondary py-3 px-3">
+                                        Status: Not active
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="rebalance-threshold" class="form-label small">Rebalancing Threshold
+                                        (Sats):</label>
+                                    <input type="number" id="rebalance-threshold" class="form-control form-control-sm" value="1" min="1" max="1000">
+                                    <small class="text-muted">Minimum difference for automatic rebalancing</small>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button id="start-stabilization" class="btn btn-success" onclick="startStabilization()" disabled="">
+                                        🎯 Start Stabilization
+                                    </button>
+                                    <button id="stop-stabilization" class="btn btn-danger" onclick="stopStabilization()" disabled="">
+                                        ⏹️ Stop Stabilization
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dual Wallet Display -->
+                        <div class="row">
+                            <!-- Stability Provider - Source Wallet -->
+                            <div class="col-md-6">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <h6 class="card-title mb-0">💰 Stability Provider (Source)</h6>
+                                        <small>Liquidity provider for rebalancing</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="wallet1-stabilization-info" class="stabilization-wallet-info">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-info-circle"></i>
+                                                <div>Connect Stability Provider to display data</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <!-- Stability Receiver - Target Wallet -->
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="card-title mb-0">🎯 Stability Receiver (Target)</h6>
+                                        <small>Stabilized wallet</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="wallet2-stabilization-info" class="stabilization-wallet-info">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-info-circle"></i>
+                                                <div>Connect Stability Receiver to display data</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <!-- Transactions Row -->
+                        <div class="row mt-3">
+                            <!-- Stability Provider Transactions -->
+                            <div class="col-md-6">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-light">
+                                        <h6 class="card-title mb-0 text-danger">📄 Stability Provider Transactions</h6>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div id="wallet1-transactions" class="wallet-transactions" style="max-height: 300px; overflow-y: auto">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-info-circle"></i>
+                                                <div>Connect Stability Provider to display transactions</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Stability Receiver Transactions -->
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-light">
+                                        <h6 class="card-title mb-0 text-success">📄 Stability Receiver Transactions</h6>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div id="wallet2-transactions" class="wallet-transactions" style="max-height: 300px; overflow-y: auto">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-info-circle"></i>
+                                                <div>Connect Stability Receiver to display transactions</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Info Section -->
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="alert alert-info py-2 px-3">
+                                    <small>
+                                        <strong>📋 How it works:</strong>
+                                        Stability Receiver balance is stabilized in the selected currency.
+                                        When prices change, automatic rebalancing occurs between both wallets.
+                                        <br>
+                                        <strong>📋 Requirement:</strong> Both wallets must be connected.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Legacy Info Section (Hidden) -->
+                        <div id="stabilization-info" style="display: none"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Debug / Log Section -->
-        <div class="demo-section">
-            <h2>Debug Log</h2>
-            <button onclick="clearLog()">Log Löschen</button>
-            <div id="debug-log" class="result-display">Debug-Nachrichten werden hier angezeigt...</div>
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="debug-section card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">🔍 Debug Log</h5>
+                        <button class="btn btn-outline-danger btn-sm" onclick="clearLog()">Clear Log</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="debug-log" class="result-display">Debug messages will be displayed here...</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Import Alby NWC SDK locally -->
-    <script type="module">
-        import { LN, nwc } from '@getalby/sdk';
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-        // Real NWC functionality using @getalby/sdk
-        let isConnected = false;
-        let nwcClient = null;
-        let connectionData = null;
-
-        function log(message) {
-            const logElement = document.getElementById('debug-log');
-            const timestamp = new Date().toLocaleTimeString();
-            logElement.textContent += `[${timestamp}] ${message}\n`;
-            logElement.scrollTop = logElement.scrollHeight;
-        }
-
-        function updateConnectionStatus(status, message) {
-            const statusElement = document.getElementById('connection-status');
-            statusElement.className = `status ${status}`;
-            statusElement.textContent = `Status: ${message}`;
-        }
-
-        async function connectWallet() {
-            const nwcUrl = document.getElementById('nwc-url').value;
-
-            if (!nwcUrl) {
-                alert('Bitte geben Sie eine gültige NWC Connection String ein');
-                return;
-            }
-
-            if (!nwcUrl.startsWith('nostr+walletconnect://')) {
-                alert('Ungültiger NWC Connection String. Muss mit "nostr+walletconnect://" beginnen');
-                return;
-            }
-
-            log('Versuche echte Wallet zu verbinden...');
-            updateConnectionStatus('connecting', 'Verbindung wird hergestellt...');
-
-            try {
-                // Create new NWC client with credentials
-                nwcClient = new nwc.NWCClient({ nostrWalletConnectUrl: nwcUrl });
-
-                // Test connection by getting wallet info
-                const info = await nwcClient.getInfo();
-
-                isConnected = true;
-                connectionData = { url: nwcUrl };
-                updateConnectionStatus('connected', 'Wallet verbunden');
-                document.getElementById('connect-btn').disabled = true;
-                document.getElementById('disconnect-btn').disabled = false;
-
-                log('Wallet erfolgreich verbunden!');
-                log(`Wallet Alias: ${info.alias || 'N/A'}`);
-                log(`Pubkey: ${info.pubkey ? info.pubkey.substring(0, 20) + '...' : 'N/A'}`);
-                log(`Methods: ${info.methods ? info.methods.join(', ') : 'N/A'}`);
-
-                // Display initial wallet info
-                document.getElementById('wallet-info').textContent = JSON.stringify(info, null, 2);
-
-            } catch (error) {
-                updateConnectionStatus('disconnected', 'Verbindung fehlgeschlagen');
-                log(`Fehler beim Verbinden: ${error.message}`);
-                console.error('NWC Connection Error:', error);
-            }
-        }
-
-        function disconnectWallet() {
-            log('Wallet Verbindung wird getrennt...');
-            isConnected = false;
-            nwcClient = null;
-            connectionData = null;
-            updateConnectionStatus('disconnected', 'Nicht verbunden');
-            document.getElementById('connect-btn').disabled = false;
-            document.getElementById('disconnect-btn').disabled = true;
-            document.getElementById('wallet-info').textContent = '';
-            document.getElementById('payment-result').textContent = '';
-            log('Wallet erfolgreich getrennt');
-        }
+    <!-- Import main application module -->
+    <script type="module" src="/nwc.397c74d2.js"></script>
 
 
-        async function getWalletInfo() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
-                return;
-            }
-
-            try {
-                log('get_info Request gesendet...');
-                const info = await nwcClient.getInfo();
-                document.getElementById('wallet-info').textContent = JSON.stringify(info, null, 2);
-                log('get_info Response erhalten');
-            } catch (error) {
-                log(`Fehler bei get_info: ${error.message}`);
-                document.getElementById('wallet-info').textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function getBalance() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
-                return;
-            }
-
-            try {
-                log('get_balance Request gesendet...');
-                const balance = await nwcClient.getBalance();
-                document.getElementById('wallet-info').textContent = JSON.stringify(balance, null, 2);
-                log(`Balance: ${balance.balance} sats`);
-            } catch (error) {
-                log(`Fehler bei get_balance: ${error.message}`);
-                document.getElementById('wallet-info').textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function createInvoice() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
-                return;
-            }
-
-            const amount = prompt('Betrag in Satoshis eingeben:', '1000');
-            if (!amount) return;
-
-            const description = prompt('Beschreibung (optional):', 'NWC Demo Invoice');
-
-            try {
-                log(`make_invoice Request für ${amount} sats...`);
-                const invoice = await nwcClient.makeInvoice({
-                    amount: parseInt(amount) * 1000, // Convert to millisats
-                    description: description || 'NWC Demo Invoice'
-                });
-
-                document.getElementById('payment-result').textContent = JSON.stringify(invoice, null, 2);
-                log('Invoice erfolgreich erstellt');
-            } catch (error) {
-                log(`Fehler beim Erstellen der Invoice: ${error.message}`);
-                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function payInvoice() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
-                return;
-            }
-
-            const invoice = prompt('Lightning Invoice eingeben:', 'lnbc...');
-            if (!invoice) return;
-
-            try {
-                log('pay_invoice Request gesendet...');
-                const result = await nwcClient.payInvoice({ invoice: invoice });
-
-                document.getElementById('payment-result').textContent = JSON.stringify(result, null, 2);
-                log('Payment erfolgreich gesendet');
-            } catch (error) {
-                log(`Fehler beim Bezahlen: ${error.message}`);
-                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function listTransactions() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
-                return;
-            }
-
-            try {
-                log('list_transactions Request gesendet...');
-                const transactions = await nwcClient.listTransactions();
-
-                document.getElementById('payment-result').textContent = JSON.stringify(transactions, null, 2);
-                log('Transaktionen abgerufen');
-            } catch (error) {
-                log(`Fehler beim Abrufen der Transaktionen: ${error.message}`);
-                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function payKeysend() {
-            if (!isConnected || !nwcClient) {
-                alert('Bitte verbinden Sie zuerst eine Wallet');
-                return;
-            }
-
-            const pubkey = prompt('Empfänger Pubkey:', '02...');
-            const amount = prompt('Betrag in Satoshis:', '1000');
-
-            if (!pubkey || !amount) return;
-
-            try {
-                log(`pay_keysend Request für ${amount} sats an ${pubkey.substring(0, 10)}...`);
-
-                const result = await nwcClient.payKeysend({
-                    pubkey: pubkey,
-                    amount: parseInt(amount) * 1000 // Convert to millisats
-                });
-
-                document.getElementById('payment-result').textContent = JSON.stringify(result, null, 2);
-                log('Keysend Payment erfolgreich gesendet');
-            } catch (error) {
-                log(`Fehler beim Keysend: ${error.message}`);
-                document.getElementById('payment-result').textContent = `Error: ${error.message}`;
-            }
-        }
-
-
-        function clearLog() {
-            document.getElementById('debug-log').textContent = 'Debug-Nachrichten werden hier angezeigt...\n';
-        }
-
-        // Make functions globally available
-        window.connectWallet = connectWallet;
-        window.disconnectWallet = disconnectWallet;
-        window.getWalletInfo = getWalletInfo;
-        window.getBalance = getBalance;
-        window.createInvoice = createInvoice;
-        window.payInvoice = payInvoice;
-        window.listTransactions = listTransactions;
-        window.payKeysend = payKeysend;
-        window.clearLog = clearLog;
-
-        // Initialize
-        window.addEventListener('load', () => {
-            log('NWC Demo Seite geladen');
-            log('ECHTE NWC INTEGRATION mit lokalen Dependencies - Verwenden Sie echte Wallet Connection Strings!');
-            log('Unterstützte Wallets: Alby Hub, Coinos, Primal, lnwallet.app, Yakihonne...');
-        });
-    </script>
-</body>
-</html>
+</body></html>
