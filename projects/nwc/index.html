@@ -1,60 +1,30 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
+<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NWC Demo - Nostr Wallet Connect</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/nwc.1303bb05.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <style>
-        body {
-            background: #f8f9fa;
-        }
-        .wallet-card {
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .wallet-card .card-header {
-            background: #e9ecef;
-            border-bottom: 1px solid #dee2e6;
-            font-weight: 600;
-        }
-        .result-display {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
-            margin: 10px 0;
-            font-family: 'Courier New', monospace;
-            white-space: pre-wrap;
-            max-height: 200px;
-            overflow-y: auto;
-            font-size: 12px;
-        }
-        .status-badge {
-            font-size: 0.875rem;
-        }
-        .btn-group-vertical .btn {
-            margin-bottom: 5px;
-        }
-        .debug-section {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            margin-top: 20px;
-        }
-    </style>
 </head>
+
 <body>
-    <div class="container-fluid py-4">
+    <div class="container py-4">
         <!-- Header -->
         <div class="row mb-4">
             <div class="col-12 text-center">
                 <h1 class="display-5 fw-bold text-primary">🔗 Nostr Wallet Connect Demo</h1>
-                <p class="lead">Experimentiere mit zwei NWC (Nostr Wallet Connect) Wallets gleichzeitig</p>
+                <p class="lead">Experiment with two NWC (Nostr Wallet Connect) wallets simultaneously</p>
+            </div>
+        </div>
+
+        <!-- Educational Disclaimer -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="alert alert-warning border-warning" role="alert">
+                    <h5 class="alert-heading mb-2">⚠️ Educational Project Only</h5>
+                    <p class="mb-0 small">This is a demonstration project created for educational purposes to showcase Nostr Wallet Connect (NWC) functionality. Use only with test wallets and small amounts. Not intended for production use.</p>
+                </div>
             </div>
         </div>
 
@@ -63,10 +33,11 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">₿ Bitcoin Preis</h5>
+                        <h5 class="card-title mb-0">₿ Bitcoin Price</h5>
                         <div>
-                            <small class="text-muted me-3" id="price-updated">Letztes Update: --</small>
-                            <button class="btn btn-outline-primary btn-sm" onclick="fetchBitcoinPrice()">↻ Aktualisieren</button>
+                            <small class="text-muted me-3" id="price-updated">Last Update: --</small>
+                            <button class="btn btn-outline-primary btn-sm" onclick="fetchBitcoinPrice()">↻
+                                Refresh</button>
                         </div>
                     </div>
                     <div class="card-body">
@@ -105,10 +76,10 @@
                         <div class="row mt-4">
                             <div class="col-12">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 class="mb-0">📈 Preis-Verlauf (alle Währungen)</h6>
+                                    <h6 class="mb-0">📈 Price History (all currencies)</h6>
                                     <div class="d-flex gap-2">
                                         <div class="btn-group btn-group-sm" role="group">
-                                            <input type="radio" class="btn-check" name="timeRange" id="range-12h" value="12h" checked onchange="updatePriceChart()">
+                                            <input type="radio" class="btn-check" name="timeRange" id="range-12h" value="12h" checked="" onchange="updatePriceChart()">
                                             <label class="btn btn-outline-primary" for="range-12h">12h</label>
 
                                             <input type="radio" class="btn-check" name="timeRange" id="range-24h" value="24h" onchange="updatePriceChart()">
@@ -123,22 +94,23 @@
                                             <input type="radio" class="btn-check" name="timeRange" id="range-7d" value="7d" onchange="updatePriceChart()">
                                             <label class="btn btn-outline-primary" for="range-7d">7d</label>
                                         </div>
-                                        <button class="btn btn-outline-secondary btn-sm" onclick="fetchHistoricalPrices()" title="Lade 7-Tage Testdaten">
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="fetchHistoricalPrices()" title="Load 7-day test data">
                                             🔄
                                         </button>
-                                        <button class="btn btn-outline-danger btn-sm" onclick="clearAndReloadPriceData()" title="Lösche alle Preisdaten und lade neu">
+                                        <button class="btn btn-outline-danger btn-sm" onclick="clearAndReloadPriceData()" title="Clear all price data and reload">
                                             🗑️
                                         </button>
                                     </div>
                                 </div>
-                                <div style="aspect-ratio: 32/9; position: relative; width: 100%;">
+                                <div style="aspect-ratio: 32 / 9; width: 100%; position: relative">
                                     <canvas id="priceChart"></canvas>
                                 </div>
                             </div>
                         </div>
                         <div class="row mt-2">
                             <div class="col-12 text-center">
-                                <small class="text-muted">Preis aktualisiert sich alle 30 Sekunden automatisch | Quelle: mempool.space</small>
+                                <small class="text-muted">Price updates automatically every 30 seconds | Source:
+                                    mempool.space</small>
                             </div>
                         </div>
                     </div>
@@ -148,35 +120,36 @@
 
         <!-- Two Wallet Columns -->
         <div class="row">
-            <!-- Wallet 1 -->
+            <!-- Stability Provider -->
             <div class="col-lg-6 mb-4">
                 <div class="wallet-card card h-100">
                     <div class="card-header text-center">
-                        <h3 class="card-title mb-0">💰 Wallet 1</h3>
+                        <h3 class="card-title mb-0">💰 Stability Provider</h3>
                     </div>
                     <div class="card-body">
                         <!-- Connection Section -->
                         <div class="mb-4">
-                            <h5 class="card-subtitle mb-3">Verbindung</h5>
+                            <h5 class="card-subtitle mb-3">Connection</h5>
                             <div class="mb-3">
                                 <label for="nwc-url-1" class="form-label">NWC Connection String:</label>
                                 <div class="input-group">
-                                    <textarea id="nwc-url-1" class="form-control" type="password" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3" style="-webkit-text-security: disc; font-family: monospace;"></textarea>
+                                    <textarea id="nwc-url-1" class="form-control" type="password" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&amp;secret=secret..." rows="3" style="-webkit-text-security: disc; font-family: monospace"></textarea>
                                     <button class="btn btn-outline-secondary" type="button" onclick="toggleConnectionVisibility(1)" id="toggle-visibility-1">
                                         👁️
                                     </button>
                                 </div>
                             </div>
                             <div class="d-grid gap-2 d-md-flex">
-                                <button id="connect-btn-1" class="btn btn-primary flex-fill" onclick="connectWallet(1)">Verbinden</button>
-                                <button id="disconnect-btn-1" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(1)" disabled>Trennen</button>
+                                <button id="connect-btn-1" class="btn btn-primary flex-fill" onclick="connectWallet(1)">Connect</button>
+                                <button id="disconnect-btn-1" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(1)" disabled="">Disconnect</button>
                             </div>
                             <div class="d-grid gap-2 d-md-flex mt-2">
-                                <button class="btn btn-outline-success btn-sm flex-fill" onclick="saveConnectionString(1)">💾 Speichern</button>
-                                <button class="btn btn-outline-danger btn-sm flex-fill" onclick="clearConnectionString(1)">🗑️ Löschen</button>
+                                <button class="btn btn-outline-success btn-sm flex-fill" onclick="saveConnectionString(1)">💾 Save</button>
+                                <button class="btn btn-outline-danger btn-sm flex-fill" onclick="clearConnectionString(1)">🗑️ Clear</button>
                             </div>
                             <div class="mt-2">
-                                <span id="connection-status-1" class="badge bg-secondary status-badge">Nicht verbunden</span>
+                                <span id="connection-status-1" class="badge bg-secondary status-badge">Not
+                                    connected</span>
                             </div>
                         </div>
 
@@ -192,16 +165,18 @@
 
                         <!-- Payment Actions -->
                         <div class="mb-3">
-                            <h5 class="card-subtitle mb-3">Payment Aktionen</h5>
+                            <h5 class="card-subtitle mb-3">Payment Actions</h5>
                             <div class="row g-2">
                                 <div class="col-6">
-                                    <button class="btn btn-success btn-sm w-100" onclick="createInvoice(1)">Invoice Erstellen</button>
+                                    <button class="btn btn-success btn-sm w-100" onclick="createInvoice(1)">Create
+                                        Invoice</button>
                                 </div>
                                 <div class="col-6">
-                                    <button class="btn btn-warning btn-sm w-100" onclick="payInvoice(1)">Invoice Bezahlen</button>
+                                    <button class="btn btn-warning btn-sm w-100" onclick="payInvoice(1)">Pay
+                                        Invoice</button>
                                 </div>
                                 <div class="col-6">
-                                    <button class="btn btn-info btn-sm w-100" onclick="listTransactions(1)">Transaktionen</button>
+                                    <button class="btn btn-info btn-sm w-100" onclick="listTransactions(1)">Transactions</button>
                                 </div>
                                 <div class="col-6">
                                     <button class="btn btn-secondary btn-sm w-100" onclick="payKeysend(1)">Keysend</button>
@@ -213,35 +188,36 @@
                 </div>
             </div>
 
-            <!-- Wallet 2 -->
+            <!-- Stability Receiver -->
             <div class="col-lg-6 mb-4">
                 <div class="wallet-card card h-100">
                     <div class="card-header text-center">
-                        <h3 class="card-title mb-0">💳 Wallet 2</h3>
+                        <h3 class="card-title mb-0">💳 Stability Receiver</h3>
                     </div>
                     <div class="card-body">
                         <!-- Connection Section -->
                         <div class="mb-4">
-                            <h5 class="card-subtitle mb-3">Verbindung</h5>
+                            <h5 class="card-subtitle mb-3">Connection</h5>
                             <div class="mb-3">
                                 <label for="nwc-url-2" class="form-label">NWC Connection String:</label>
                                 <div class="input-group">
-                                    <textarea id="nwc-url-2" class="form-control" type="password" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&secret=secret..." rows="3" style="-webkit-text-security: disc; font-family: monospace;"></textarea>
+                                    <textarea id="nwc-url-2" class="form-control" type="password" placeholder="nostr+walletconnect://pubkey?relay=wss://relay.example.com&amp;secret=secret..." rows="3" style="-webkit-text-security: disc; font-family: monospace"></textarea>
                                     <button class="btn btn-outline-secondary" type="button" onclick="toggleConnectionVisibility(2)" id="toggle-visibility-2">
                                         👁️
                                     </button>
                                 </div>
                             </div>
                             <div class="d-grid gap-2 d-md-flex">
-                                <button id="connect-btn-2" class="btn btn-primary flex-fill" onclick="connectWallet(2)">Verbinden</button>
-                                <button id="disconnect-btn-2" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(2)" disabled>Trennen</button>
+                                <button id="connect-btn-2" class="btn btn-primary flex-fill" onclick="connectWallet(2)">Connect</button>
+                                <button id="disconnect-btn-2" class="btn btn-outline-secondary flex-fill" onclick="disconnectWallet(2)" disabled="">Disconnect</button>
                             </div>
                             <div class="d-grid gap-2 d-md-flex mt-2">
-                                <button class="btn btn-outline-success btn-sm flex-fill" onclick="saveConnectionString(2)">💾 Speichern</button>
-                                <button class="btn btn-outline-danger btn-sm flex-fill" onclick="clearConnectionString(2)">🗑️ Löschen</button>
+                                <button class="btn btn-outline-success btn-sm flex-fill" onclick="saveConnectionString(2)">💾 Save</button>
+                                <button class="btn btn-outline-danger btn-sm flex-fill" onclick="clearConnectionString(2)">🗑️ Clear</button>
                             </div>
                             <div class="mt-2">
-                                <span id="connection-status-2" class="badge bg-secondary status-badge">Nicht verbunden</span>
+                                <span id="connection-status-2" class="badge bg-secondary status-badge">Not
+                                    connected</span>
                             </div>
                         </div>
 
@@ -257,16 +233,18 @@
 
                         <!-- Payment Actions -->
                         <div class="mb-4">
-                            <h5 class="card-subtitle mb-3">Payment Aktionen</h5>
+                            <h5 class="card-subtitle mb-3">Payment Actions</h5>
                             <div class="row g-2">
                                 <div class="col-6">
-                                    <button class="btn btn-success btn-sm w-100" onclick="createInvoice(2)">Invoice Erstellen</button>
+                                    <button class="btn btn-success btn-sm w-100" onclick="createInvoice(2)">Create
+                                        Invoice</button>
                                 </div>
                                 <div class="col-6">
-                                    <button class="btn btn-warning btn-sm w-100" onclick="payInvoice(2)">Invoice Bezahlen</button>
+                                    <button class="btn btn-warning btn-sm w-100" onclick="payInvoice(2)">Pay
+                                        Invoice</button>
                                 </div>
                                 <div class="col-6">
-                                    <button class="btn btn-info btn-sm w-100" onclick="listTransactions(2)">Transaktionen</button>
+                                    <button class="btn btn-info btn-sm w-100" onclick="listTransactions(2)">Transactions</button>
                                 </div>
                                 <div class="col-6">
                                     <button class="btn btn-secondary btn-sm w-100" onclick="payKeysend(2)">Keysend</button>
@@ -285,17 +263,19 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header text-center">
-                        <h4 class="card-title mb-0">💱 Balance Stabilisierung</h4>
-                        <small class="text-muted">Automatische Währungsstabilisierung zwischen Wallet 1 & 2</small>
+                        <h4 class="card-title mb-0">💱 Balance Stabilization</h4>
+                        <small class="text-muted">Automatic currency stabilization between Stability Provider &amp;
+                            Receiver</small>
                     </div>
                     <div class="card-body">
                         <!-- Control Section -->
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="stabilization-currency" class="form-label">Zielwährung auswählen:</label>
+                                    <label for="stabilization-currency" class="form-label">Select target
+                                        currency:</label>
                                     <select id="stabilization-currency" class="form-select">
-                                        <option value="">-- Währung wählen --</option>
+                                        <option value="">-- Choose currency --</option>
                                         <option value="usd">USD ($)</option>
                                         <option value="eur">EUR (€)</option>
                                         <option value="gbp">GBP (£)</option>
@@ -306,22 +286,23 @@
                                 </div>
                                 <div class="mb-3">
                                     <div id="stabilization-status" class="alert alert-secondary py-3 px-3">
-                                        Status: Nicht aktiv
+                                        Status: Not active
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="rebalance-threshold" class="form-label small">Rebalancing Threshold (Sats):</label>
+                                    <label for="rebalance-threshold" class="form-label small">Rebalancing Threshold
+                                        (Sats):</label>
                                     <input type="number" id="rebalance-threshold" class="form-control form-control-sm" value="1" min="1" max="1000">
-                                    <small class="text-muted">Minimale Differenz für automatisches Rebalancing</small>
+                                    <small class="text-muted">Minimum difference for automatic rebalancing</small>
                                 </div>
                                 <div class="d-grid gap-2">
-                                    <button id="start-stabilization" class="btn btn-success" onclick="startStabilization()" disabled>
-                                        🎯 Stabilisierung Starten
+                                    <button id="start-stabilization" class="btn btn-success" onclick="startStabilization()" disabled="">
+                                        🎯 Start Stabilization
                                     </button>
-                                    <button id="stop-stabilization" class="btn btn-danger" onclick="stopStabilization()" disabled>
-                                        ⏹️ Stabilisierung Stoppen
+                                    <button id="stop-stabilization" class="btn btn-danger" onclick="stopStabilization()" disabled="">
+                                        ⏹️ Stop Stabilization
                                     </button>
                                 </div>
                             </div>
@@ -329,18 +310,18 @@
 
                         <!-- Dual Wallet Display -->
                         <div class="row">
-                            <!-- Wallet 1 - Source Wallet -->
+                            <!-- Stability Provider - Source Wallet -->
                             <div class="col-md-6">
-                                <div class="card border-primary">
-                                    <div class="card-header bg-primary text-white">
-                                        <h6 class="card-title mb-0">💰 Wallet 1 (Quelle)</h6>
-                                        <small>Liquiditäts-Provider für Rebalancing</small>
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <h6 class="card-title mb-0">💰 Stability Provider (Source)</h6>
+                                        <small>Liquidity provider for rebalancing</small>
                                     </div>
                                     <div class="card-body">
                                         <div id="wallet1-stabilization-info" class="stabilization-wallet-info">
                                             <div class="text-center text-muted py-3">
                                                 <i class="fas fa-info-circle"></i>
-                                                <div>Wallet 1 verbinden um Daten anzuzeigen</div>
+                                                <div>Connect Stability Provider to display data</div>
                                             </div>
                                         </div>
                                     </div>
@@ -348,18 +329,18 @@
 
                             </div>
 
-                            <!-- Wallet 2 - Target Wallet -->
+                            <!-- Stability Receiver - Target Wallet -->
                             <div class="col-md-6">
                                 <div class="card border-success">
                                     <div class="card-header bg-success text-white">
-                                        <h6 class="card-title mb-0">🎯 Wallet 2 (Ziel)</h6>
-                                        <small>Stabilisierte Wallet</small>
+                                        <h6 class="card-title mb-0">🎯 Stability Receiver (Target)</h6>
+                                        <small>Stabilized wallet</small>
                                     </div>
                                     <div class="card-body">
                                         <div id="wallet2-stabilization-info" class="stabilization-wallet-info">
                                             <div class="text-center text-muted py-3">
                                                 <i class="fas fa-info-circle"></i>
-                                                <div>Wallet 2 verbinden um Daten anzuzeigen</div>
+                                                <div>Connect Stability Receiver to display data</div>
                                             </div>
                                         </div>
                                     </div>
@@ -370,34 +351,34 @@
 
                         <!-- Transactions Row -->
                         <div class="row mt-3">
-                            <!-- Wallet 1 Transactions -->
+                            <!-- Stability Provider Transactions -->
                             <div class="col-md-6">
-                                <div class="card border-primary">
+                                <div class="card border-danger">
                                     <div class="card-header bg-light">
-                                        <h6 class="card-title mb-0 text-primary">📄 Wallet 1 Transaktionen</h6>
+                                        <h6 class="card-title mb-0 text-danger">📄 Stability Provider Transactions</h6>
                                     </div>
                                     <div class="card-body p-0">
-                                        <div id="wallet1-transactions" class="wallet-transactions" style="max-height: 300px; overflow-y: auto;">
+                                        <div id="wallet1-transactions" class="wallet-transactions" style="max-height: 300px; overflow-y: auto">
                                             <div class="text-center text-muted py-3">
                                                 <i class="fas fa-info-circle"></i>
-                                                <div>Wallet 1 verbinden um Transaktionen anzuzeigen</div>
+                                                <div>Connect Stability Provider to display transactions</div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Wallet 2 Transactions -->
+                            <!-- Stability Receiver Transactions -->
                             <div class="col-md-6">
                                 <div class="card border-success">
                                     <div class="card-header bg-light">
-                                        <h6 class="card-title mb-0 text-success">📄 Wallet 2 Transaktionen</h6>
+                                        <h6 class="card-title mb-0 text-success">📄 Stability Receiver Transactions</h6>
                                     </div>
                                     <div class="card-body p-0">
-                                        <div id="wallet2-transactions" class="wallet-transactions" style="max-height: 300px; overflow-y: auto;">
+                                        <div id="wallet2-transactions" class="wallet-transactions" style="max-height: 300px; overflow-y: auto">
                                             <div class="text-center text-muted py-3">
                                                 <i class="fas fa-info-circle"></i>
-                                                <div>Wallet 2 verbinden um Transaktionen anzuzeigen</div>
+                                                <div>Connect Stability Receiver to display transactions</div>
                                             </div>
                                         </div>
                                     </div>
@@ -410,18 +391,18 @@
                             <div class="col-12">
                                 <div class="alert alert-info py-2 px-3">
                                     <small>
-                                        <strong>📋 Funktionsweise:</strong>
-                                        Wallet 2 Balance wird in der gewählten Währung stabilisiert.
-                                        Bei Preisänderungen erfolgt automatisches Rebalancing zwischen beiden Wallets.
+                                        <strong>📋 How it works:</strong>
+                                        Stability Receiver balance is stabilized in the selected currency.
+                                        When prices change, automatic rebalancing occurs between both wallets.
                                         <br>
-                                        <strong>📋 Voraussetzung:</strong> Beide Wallets müssen verbunden sein.
+                                        <strong>📋 Requirement:</strong> Both wallets must be connected.
                                     </small>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Legacy Info Section (Hidden) -->
-                        <div id="stabilization-info" style="display: none;"></div>
+                        <div id="stabilization-info" style="display: none"></div>
                     </div>
                 </div>
             </div>
@@ -433,10 +414,10 @@
                 <div class="debug-section card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="card-title mb-0">🔍 Debug Log</h5>
-                        <button class="btn btn-outline-danger btn-sm" onclick="clearLog()">Log Löschen</button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="clearLog()">Clear Log</button>
                     </div>
                     <div class="card-body">
-                        <div id="debug-log" class="result-display">Debug-Nachrichten werden hier angezeigt...</div>
+                        <div id="debug-log" class="result-display">Debug messages will be displayed here...</div>
                     </div>
                 </div>
             </div>
@@ -446,1585 +427,8 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- Import Alby NWC SDK locally -->
-    <script type="module">
-        import { LN, nwc } from '@getalby/sdk';
+    <!-- Import main application module -->
+    <script type="module" src="/nwc.397c74d2.js"></script>
 
-        // Real NWC functionality using @getalby/sdk - Dual Wallet Support
-        const wallets = {
-            1: { isConnected: false, nwcClient: null, connectionData: null, transactionsSupported: null },
-            2: { isConnected: false, nwcClient: null, connectionData: null, transactionsSupported: null }
-        };
 
-        // Bitcoin Price functionality
-        let priceUpdateInterval = null;
-        let priceChart = null;
-
-        // Price Storage System
-        const PRICE_STORAGE_KEY = 'nwc-price-history';
-        const MAX_PRICE_HISTORY = 10000; // Keep last 10,000 price points (up to 7+ days)
-        const PRICE_CHANGE_THRESHOLD = 0.5; // Minimum 0.5% price change to store point
-
-        // Stabilization System
-        let stabilizationData = {
-            active: false,
-            currency: null,
-            initialBalance: 0,
-            targetValue: 0,
-            initialPrice: 0,
-            checkInterval: null,
-            threshold: 1, // minimum sats difference to trigger rebalancing
-            lastRebalanceTime: 0,
-            rebalanceMinInterval: 5000, // minimum 5 seconds between rebalances (reduced for testing)
-            errorCount: 0,
-            maxErrors: 5
-        };
-
-        // Local Storage Functions
-        function saveNWCString(walletId, nwcUrl) {
-            localStorage.setItem(`nwc-wallet-${walletId}`, nwcUrl);
-            log(`Wallet ${walletId}: NWC String gespeichert`);
-        }
-
-        function loadNWCString(walletId) {
-            return localStorage.getItem(`nwc-wallet-${walletId}`) || '';
-        }
-
-        function clearNWCString(walletId) {
-            localStorage.removeItem(`nwc-wallet-${walletId}`);
-            log(`Wallet ${walletId}: Gespeicherter NWC String gelöscht`);
-        }
-
-        // Price Storage Functions
-        function savePriceHistory(priceData) {
-            try {
-                const history = getPriceHistory();
-                const timestamp = Date.now();
-
-                // Check if we should save this point
-                if (history.length > 0) {
-                    const lastPoint = history[history.length - 1];
-                    const timeDiff = timestamp - lastPoint.timestamp;
-
-                    // Minimum interval: 1 hour (to match historical data pattern)
-                    const minInterval = 60 * 60 * 1000; // 1 hour in milliseconds
-
-                    // Check for significant price change
-                    const shouldSave = Object.keys(priceData).some(currency => {
-                        const oldPrice = lastPoint.prices[currency];
-                        const newPrice = priceData[currency];
-                        const changePercent = Math.abs((newPrice - oldPrice) / oldPrice * 100);
-                        return changePercent >= PRICE_CHANGE_THRESHOLD;
-                    });
-
-                    // Only save if:
-                    // 1. Significant price change AND at least 1 hour has passed, OR
-                    // 2. At least 2 hours have passed (to maintain regular intervals)
-                    const hoursPassed = timeDiff / (1000 * 60 * 60);
-
-                    if (hoursPassed < 1) {
-                        // Too soon, just update timestamp of last point
-                        lastPoint.timestamp = timestamp;
-                        localStorage.setItem(PRICE_STORAGE_KEY, JSON.stringify(history));
-                        return;
-                    } else if (hoursPassed < 2 && !shouldSave) {
-                        // Between 1-2 hours but no significant change, skip
-                        lastPoint.timestamp = timestamp;
-                        localStorage.setItem(PRICE_STORAGE_KEY, JSON.stringify(history));
-                        return;
-                    }
-                }
-
-                // Add new price point
-                history.push({
-                    timestamp: timestamp,
-                    prices: { ...priceData }
-                });
-
-                // Keep only last MAX_PRICE_HISTORY points
-                if (history.length > MAX_PRICE_HISTORY) {
-                    history.splice(0, history.length - MAX_PRICE_HISTORY);
-                }
-
-                localStorage.setItem(PRICE_STORAGE_KEY, JSON.stringify(history));
-                console.log(`💾 Neuer Preispunkt gespeichert (${history.length} total)`);
-            } catch (error) {
-                console.error('Error saving price history:', error);
-            }
-        }
-
-        function getPriceHistory() {
-            try {
-                const stored = localStorage.getItem(PRICE_STORAGE_KEY);
-                return stored ? JSON.parse(stored) : [];
-            } catch (error) {
-                console.error('Error loading price history:', error);
-                return [];
-            }
-        }
-
-        function getFilteredPriceHistory(timeRange) {
-            const history = getPriceHistory();
-            if (history.length === 0) return [];
-
-            const now = Date.now();
-            let timeWindow;
-
-            switch (timeRange) {
-                case '12h':
-                    timeWindow = 12 * 60 * 60 * 1000; // 12 hours
-                    break;
-                case '24h':
-                    timeWindow = 24 * 60 * 60 * 1000; // 24 hours
-                    break;
-                case '2d':
-                    timeWindow = 2 * 24 * 60 * 60 * 1000; // 2 days
-                    break;
-                case '4d':
-                    timeWindow = 4 * 24 * 60 * 60 * 1000; // 4 days
-                    break;
-                case '7d':
-                    timeWindow = 7 * 24 * 60 * 60 * 1000; // 7 days
-                    break;
-                default:
-                    timeWindow = 12 * 60 * 60 * 1000; // Default to 12 hours
-            }
-
-            const cutoffTime = now - timeWindow;
-            return history.filter(point => point.timestamp >= cutoffTime);
-        }
-
-        function clearPriceHistory() {
-            localStorage.removeItem(PRICE_STORAGE_KEY);
-            log('Preis-Historie gelöscht');
-        }
-
-        function toggleConnectionVisibility(walletId) {
-            const textarea = document.getElementById(`nwc-url-${walletId}`);
-            const toggleBtn = document.getElementById(`toggle-visibility-${walletId}`);
-
-            const isHidden = textarea.style.webkitTextSecurity === 'disc';
-
-            if (isHidden) {
-                // Show text
-                textarea.style.webkitTextSecurity = 'none';
-                toggleBtn.textContent = '🙈';
-                toggleBtn.title = 'Connection String verstecken';
-            } else {
-                // Hide text
-                textarea.style.webkitTextSecurity = 'disc';
-                toggleBtn.textContent = '👁️';
-                toggleBtn.title = 'Connection String anzeigen';
-            }
-        }
-
-        async function clearAndReloadPriceData() {
-            try {
-                log('🗑️ Lösche alle Preisdaten...');
-
-                // Clear existing price history
-                localStorage.removeItem(PRICE_STORAGE_KEY);
-
-                // Clear chart
-                if (priceChart) {
-                    priceChart.data.labels = [];
-                    priceChart.data.datasets.forEach(dataset => {
-                        dataset.data = [];
-                    });
-                    priceChart.update();
-                }
-
-                log('✅ Preisdaten gelöscht');
-
-                // Reload fresh historical data
-                await fetchHistoricalPrices();
-
-                log('✅ Frische Preisdaten geladen');
-
-            } catch (error) {
-                log(`❌ Fehler beim Neuladen der Preisdaten: ${error.message}`);
-                console.error('Error clearing and reloading price data:', error);
-            }
-        }
-
-        function log(message) {
-            const logElement = document.getElementById('debug-log');
-            const timestamp = new Date().toLocaleTimeString();
-            logElement.textContent += `[${timestamp}] ${message}\n`;
-            logElement.scrollTop = logElement.scrollHeight;
-        }
-
-        function updateConnectionStatus(walletId, status, message) {
-            const statusElement = document.getElementById(`connection-status-${walletId}`);
-            const badgeClass = status === 'connected' ? 'bg-success' :
-                              status === 'connecting' ? 'bg-warning' : 'bg-secondary';
-            statusElement.className = `badge ${badgeClass} status-badge`;
-            statusElement.textContent = message;
-        }
-
-        async function connectWallet(walletId) {
-            const nwcUrl = document.getElementById(`nwc-url-${walletId}`).value;
-
-            if (!nwcUrl) {
-                alert('Bitte geben Sie eine gültige NWC Connection String ein');
-                return;
-            }
-
-            if (!nwcUrl.startsWith('nostr+walletconnect://')) {
-                alert('Ungültiger NWC Connection String. Muss mit "nostr+walletconnect://" beginnen');
-                return;
-            }
-
-            log(`Wallet ${walletId}: Versuche echte Wallet zu verbinden...`);
-            updateConnectionStatus(walletId, 'connecting', 'Verbindung wird hergestellt...');
-
-            try {
-                // Create new NWC client with credentials
-                wallets[walletId].nwcClient = new nwc.NWCClient({ nostrWalletConnectUrl: nwcUrl });
-
-                // Test connection by getting wallet info
-                const info = await wallets[walletId].nwcClient.getInfo();
-
-                wallets[walletId].isConnected = true;
-                wallets[walletId].connectionData = { url: nwcUrl };
-                updateConnectionStatus(walletId, 'connected', 'Verbunden');
-
-                // Disable connection form when connected
-                document.getElementById(`nwc-url-${walletId}`).disabled = true;
-                document.getElementById(`toggle-visibility-${walletId}`).disabled = true;
-                document.getElementById(`connect-btn-${walletId}`).disabled = true;
-                document.getElementById(`disconnect-btn-${walletId}`).disabled = false;
-
-                // Auto-save connection string
-                saveNWCString(walletId, nwcUrl);
-
-                log(`Wallet ${walletId}: Erfolgreich verbunden!`);
-                log(`Wallet ${walletId}: Alias: ${info.alias || 'N/A'}`);
-                log(`Wallet ${walletId}: Pubkey: ${info.pubkey ? info.pubkey.substring(0, 20) + '...' : 'N/A'}`);
-                log(`Wallet ${walletId}: Methods: ${info.methods ? info.methods.join(', ') : 'N/A'}`);
-
-                // Display initial wallet info
-                document.getElementById(`wallet-info-${walletId}`).textContent = JSON.stringify(info, null, 2);
-
-                // Update stabilization UI
-                updateStabilizationUIOnConnect();
-
-            } catch (error) {
-                updateConnectionStatus(walletId, 'disconnected', 'Verbindung fehlgeschlagen');
-                log(`Wallet ${walletId}: Fehler beim Verbinden: ${error.message}`);
-                console.error(`Wallet ${walletId} NWC Connection Error:`, error);
-            }
-        }
-
-        function disconnectWallet(walletId) {
-            log(`Wallet ${walletId}: Verbindung wird getrennt...`);
-            wallets[walletId].isConnected = false;
-            wallets[walletId].nwcClient = null;
-            wallets[walletId].connectionData = null;
-            wallets[walletId].transactionsSupported = null; // Reset transaction support flag
-            updateConnectionStatus(walletId, 'disconnected', 'Nicht verbunden');
-
-            // Re-enable connection form when disconnected
-            document.getElementById(`nwc-url-${walletId}`).disabled = false;
-            document.getElementById(`toggle-visibility-${walletId}`).disabled = false;
-            document.getElementById(`connect-btn-${walletId}`).disabled = false;
-            document.getElementById(`disconnect-btn-${walletId}`).disabled = true;
-            document.getElementById(`wallet-info-${walletId}`).textContent = '';
-            document.getElementById(`payment-result-${walletId}`).textContent = '';
-            log(`Wallet ${walletId}: Erfolgreich getrennt`);
-
-            // Update stabilization UI
-            updateStabilizationUIOnConnect();
-
-            // Stop stabilization if Wallet 2 is disconnected
-            if (walletId === 2 && stabilizationData.active) {
-                stopStabilization();
-            }
-        }
-
-
-        async function getWalletInfo(walletId) {
-            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
-                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
-                return;
-            }
-
-            try {
-                log(`Wallet ${walletId}: get_info Request gesendet...`);
-                const info = await wallets[walletId].nwcClient.getInfo();
-                document.getElementById(`wallet-info-${walletId}`).textContent = JSON.stringify(info, null, 2);
-                log(`Wallet ${walletId}: get_info Response erhalten`);
-            } catch (error) {
-                log(`Wallet ${walletId}: Fehler bei get_info: ${error.message}`);
-                document.getElementById(`wallet-info-${walletId}`).textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function getBalance(walletId) {
-            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
-                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
-                return;
-            }
-
-            try {
-                log(`Wallet ${walletId}: get_balance Request gesendet...`);
-                const balance = await wallets[walletId].nwcClient.getBalance();
-
-                // Convert balance display to show correct sats
-                const displayBalance = {
-                    ...balance,
-                    balance_sats: Math.round(balance.balance / 1000),
-                    balance_millisats: balance.balance
-                };
-
-                document.getElementById(`wallet-info-${walletId}`).textContent = JSON.stringify(displayBalance, null, 2);
-                log(`Wallet ${walletId}: Balance: ${Math.round(balance.balance / 1000)} sats (${balance.balance} millisats)`);
-            } catch (error) {
-                log(`Wallet ${walletId}: Fehler bei get_balance: ${error.message}`);
-                document.getElementById(`wallet-info-${walletId}`).textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function createInvoice(walletId) {
-            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
-                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
-                return;
-            }
-
-            const amount = prompt('Betrag in Satoshis eingeben:', '1000');
-            if (!amount) return;
-
-            const description = prompt('Beschreibung (optional):', `NWC Demo Invoice - Wallet ${walletId}`);
-
-            try {
-                log(`Wallet ${walletId}: make_invoice Request für ${amount} sats...`);
-                const invoice = await wallets[walletId].nwcClient.makeInvoice({
-                    amount: parseInt(amount) * 1000, // Convert to millisats
-                    description: description || `NWC Demo Invoice - Wallet ${walletId}`
-                });
-
-                document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(invoice, null, 2);
-                log(`Wallet ${walletId}: Invoice erfolgreich erstellt`);
-            } catch (error) {
-                log(`Wallet ${walletId}: Fehler beim Erstellen der Invoice: ${error.message}`);
-                document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function payInvoice(walletId) {
-            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
-                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
-                return;
-            }
-
-            const invoice = prompt('Lightning Invoice eingeben:', 'lnbc...');
-            if (!invoice) return;
-
-            try {
-                log(`Wallet ${walletId}: pay_invoice Request gesendet...`);
-                const result = await wallets[walletId].nwcClient.payInvoice({ invoice: invoice });
-
-                document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(result, null, 2);
-                log(`Wallet ${walletId}: Payment erfolgreich gesendet`);
-            } catch (error) {
-                log(`Wallet ${walletId}: Fehler beim Bezahlen: ${error.message}`);
-                document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function listTransactions(walletId) {
-            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
-                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
-                return;
-            }
-
-            try {
-                log(`Wallet ${walletId}: list_transactions Request gesendet...`);
-
-                // listTransactions mit optionalen Parametern
-                const transactions = await wallets[walletId].nwcClient.listTransactions({
-                    from: 0,
-                    until: Math.floor(Date.now() / 1000),
-                    limit: 50,
-                    offset: 0,
-                    unpaid: false,
-                    type: undefined // alle Typen
-                });
-
-                document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(transactions, null, 2);
-                log(`Wallet ${walletId}: ${transactions.transactions ? transactions.transactions.length : 0} Transaktionen abgerufen`);
-            } catch (error) {
-                log(`Wallet ${walletId}: Fehler beim Abrufen der Transaktionen: ${error.message}`);
-                console.error(`Wallet ${walletId} listTransactions error:`, error);
-
-                // Fallback: Versuche ohne Parameter
-                try {
-                    log(`Wallet ${walletId}: Versuche listTransactions ohne Parameter...`);
-                    const transactions = await wallets[walletId].nwcClient.listTransactions({});
-                    document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(transactions, null, 2);
-                    log(`Wallet ${walletId}: Transaktionen mit Fallback-Methode abgerufen`);
-                } catch (fallbackError) {
-                    log(`Wallet ${walletId}: Auch Fallback fehlgeschlagen: ${fallbackError.message}`);
-                    document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}\nFallback Error: ${fallbackError.message}`;
-                }
-            }
-        }
-
-        async function payKeysend(walletId) {
-            if (!wallets[walletId].isConnected || !wallets[walletId].nwcClient) {
-                alert(`Bitte verbinden Sie zuerst Wallet ${walletId}`);
-                return;
-            }
-
-            const pubkey = prompt('Empfänger Pubkey:', '02...');
-            const amount = prompt('Betrag in Satoshis:', '1000');
-
-            if (!pubkey || !amount) return;
-
-            try {
-                log(`Wallet ${walletId}: pay_keysend Request für ${amount} sats an ${pubkey.substring(0, 10)}...`);
-
-                const result = await wallets[walletId].nwcClient.payKeysend({
-                    pubkey: pubkey,
-                    amount: parseInt(amount) * 1000 // Convert to millisats
-                });
-
-                document.getElementById(`payment-result-${walletId}`).textContent = JSON.stringify(result, null, 2);
-                log(`Wallet ${walletId}: Keysend Payment erfolgreich gesendet`);
-            } catch (error) {
-                log(`Wallet ${walletId}: Fehler beim Keysend: ${error.message}`);
-                document.getElementById(`payment-result-${walletId}`).textContent = `Error: ${error.message}`;
-            }
-        }
-
-
-        function clearLog() {
-            document.getElementById('debug-log').textContent = 'Debug-Nachrichten werden hier angezeigt...\n';
-        }
-
-        // Historical Price Functions
-        async function fetchHistoricalPrices() {
-            try {
-                log('📈 Lade echte historische Preise von mempool.space...');
-
-                const response = await fetch('https://mempool.space/api/v1/historical-price');
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                log(`📈 ${data.prices.length} historische Datenpunkte von API erhalten`);
-
-                // Convert mempool.space data to our format
-                const convertedHistory = data.prices.map(item => ({
-                    timestamp: item.time * 1000, // Convert Unix timestamp to milliseconds
-                    prices: {
-                        USD: item.USD,
-                        EUR: item.EUR,
-                        GBP: item.GBP,
-                        CHF: item.CHF,
-                        CAD: item.CAD,
-                        JPY: item.JPY,
-                        AUD: item.AUD // Also include AUD if we want to expand later
-                    }
-                }));
-
-                // Sort by timestamp (oldest first) and limit to our storage limit
-                const sortedHistory = convertedHistory
-                    .sort((a, b) => a.timestamp - b.timestamp)
-                    .slice(-MAX_PRICE_HISTORY);
-
-                // Save to localStorage
-                localStorage.setItem(PRICE_STORAGE_KEY, JSON.stringify(sortedHistory));
-
-                log(`📈 ${sortedHistory.length} echte historische Preispunkte gespeichert`);
-
-                // Update chart if it exists
-                if (priceChart) {
-                    updatePriceChart();
-                }
-
-            } catch (error) {
-                log(`📈 Fehler beim Laden historischer Preise: ${error.message}`);
-                console.error('Historical price fetch error:', error);
-
-                // Fallback: Log that we're using existing data
-                const existingHistory = getPriceHistory();
-                if (existingHistory.length > 0) {
-                    log(`📈 Verwende ${existingHistory.length} vorhandene Preispunkte`);
-                } else {
-                    log('📈 Keine historischen Daten verfügbar');
-                }
-            }
-        }
-
-        // Bitcoin Price Functions
-        async function fetchBitcoinPrice() {
-            try {
-                log('Bitcoin Preis wird abgerufen...');
-
-                const response = await fetch('https://mempool.space/api/v1/prices');
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const priceData = await response.json();
-
-                // Update price displays
-                updatePriceDisplay(priceData);
-
-                // Update live price in chart (instead of just saving to history)
-                updateLivePriceInChart(priceData);
-
-                log('Bitcoin Preis erfolgreich aktualisiert');
-
-            } catch (error) {
-                log(`Fehler beim Abrufen des Bitcoin Preises: ${error.message}`);
-                console.error('Bitcoin price fetch error:', error);
-
-                // Update displays with error
-                const currencies = ['usd', 'eur', 'gbp', 'chf', 'cad', 'jpy'];
-                currencies.forEach(currency => {
-                    document.getElementById(`price-${currency}`).textContent = 'Error';
-                    document.getElementById(`sats-${currency}`).textContent = 'Error';
-                });
-                document.getElementById('price-updated').textContent = 'Letztes Update: Fehler';
-            }
-        }
-
-        function updateLivePriceInChart(priceData) {
-            if (!priceChart) return;
-
-            const now = Date.now();
-            const selectedRange = document.querySelector('input[name="timeRange"]:checked')?.value || '12h';
-
-            // Get current history
-            const history = getPriceHistory();
-
-            // Create current price point
-            const currentPricePoint = {
-                timestamp: now,
-                prices: {
-                    USD: priceData.USD,
-                    EUR: priceData.EUR,
-                    GBP: priceData.GBP,
-                    CHF: priceData.CHF,
-                    CAD: priceData.CAD,
-                    JPY: priceData.JPY
-                }
-            };
-
-            // Create temporary history with current price
-            const liveHistory = [...history, currentPricePoint];
-
-            // Filter for selected time range
-            const filteredHistory = filterHistoryByRange(liveHistory, selectedRange);
-
-            if (filteredHistory.length === 0) return;
-
-            // Update chart with live data
-            const labels = filteredHistory.map(item => item.timestamp);
-            const currencies = ['USD', 'EUR', 'GBP', 'CHF', 'CAD', 'JPY'];
-
-            priceChart.data.labels = labels;
-
-            currencies.forEach((currency, index) => {
-                const dataPoints = filteredHistory.map((item) => ({
-                    x: item.timestamp,
-                    y: item.prices[currency]
-                }));
-                priceChart.data.datasets[index].data = dataPoints;
-            });
-
-            // Update chart with no animation for smooth live updates
-            priceChart.update('none');
-
-            // Save to persistent history only according to our rules
-            savePriceHistory(priceData);
-        }
-
-        function filterHistoryByRange(history, timeRange) {
-            if (history.length === 0) return [];
-
-            const now = Date.now();
-            let timeWindow;
-
-            switch (timeRange) {
-                case '12h':
-                    timeWindow = 12 * 60 * 60 * 1000;
-                    break;
-                case '24h':
-                    timeWindow = 24 * 60 * 60 * 1000;
-                    break;
-                case '2d':
-                    timeWindow = 2 * 24 * 60 * 60 * 1000;
-                    break;
-                case '4d':
-                    timeWindow = 4 * 24 * 60 * 60 * 1000;
-                    break;
-                case '7d':
-                    timeWindow = 7 * 24 * 60 * 60 * 1000;
-                    break;
-                default:
-                    timeWindow = 12 * 60 * 60 * 1000;
-            }
-
-            const cutoffTime = now - timeWindow;
-            return history.filter(point => point.timestamp >= cutoffTime);
-        }
-
-        function updatePriceDisplay(priceData) {
-            // Format and display prices
-            const currencies = {
-                usd: { symbol: '$', value: priceData.USD, unit: '$1' },
-                eur: { symbol: '€', value: priceData.EUR, unit: '€1' },
-                gbp: { symbol: '£', value: priceData.GBP, unit: '£1' },
-                chf: { symbol: '₣', value: priceData.CHF, unit: '₣1' },
-                cad: { symbol: 'C$', value: priceData.CAD, unit: 'C$1' },
-                jpy: { symbol: '¥', value: priceData.JPY, unit: '¥1' }
-            };
-
-            Object.entries(currencies).forEach(([currency, data]) => {
-                const priceElement = document.getElementById(`price-${currency}`);
-                const satsElement = document.getElementById(`sats-${currency}`);
-
-                if (priceElement && satsElement && data.value) {
-                    // Format Bitcoin price
-                    const formattedValue = currency === 'jpy' ?
-                        Math.round(data.value).toLocaleString() :
-                        data.value.toLocaleString('de-DE', {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 0
-                        });
-
-                    priceElement.textContent = `${data.symbol} ${formattedValue}`;
-
-                    // Calculate satoshis for 1 unit of currency
-                    // 1 BTC = 100,000,000 satoshis
-                    // satoshis per currency unit = 100,000,000 / (BTC price in that currency)
-                    const satoshisPerUnit = Math.round(100000000 / data.value);
-                    const formattedSats = satoshisPerUnit.toLocaleString('de-DE');
-
-                    satsElement.textContent = `${formattedSats} sats = ${data.unit}`;
-                }
-            });
-
-            // Update timestamp
-            const now = new Date();
-            const timeString = now.toLocaleTimeString('de-DE');
-            document.getElementById('price-updated').textContent = `Letztes Update: ${timeString}`;
-        }
-
-        function startPriceUpdates() {
-            // Clear existing interval
-            if (priceUpdateInterval) {
-                clearInterval(priceUpdateInterval);
-            }
-
-            // Fetch price immediately
-            fetchBitcoinPrice();
-
-            // Set up auto-refresh every 30 seconds
-            priceUpdateInterval = setInterval(fetchBitcoinPrice, 30000);
-
-            log('Bitcoin Preis Auto-Update gestartet (alle 30 Sekunden)');
-        }
-
-        function stopPriceUpdates() {
-            if (priceUpdateInterval) {
-                clearInterval(priceUpdateInterval);
-                priceUpdateInterval = null;
-                log('Bitcoin Preis Auto-Update gestoppt');
-            }
-        }
-
-        // Stabilization System Functions
-        async function startStabilization() {
-            const currency = document.getElementById('stabilization-currency').value;
-
-            if (!currency) {
-                alert('Bitte wählen Sie eine Währung aus');
-                return;
-            }
-
-            if (!wallets[2].isConnected || !wallets[2].nwcClient) {
-                alert('Wallet 2 muss verbunden sein für die Stabilisierung');
-                return;
-            }
-
-            if (!wallets[1].isConnected || !wallets[1].nwcClient) {
-                alert('Wallet 1 muss für das Rebalancing verbunden sein');
-                return;
-            }
-
-            try {
-                log(`💱 Stabilisierung wird gestartet für ${currency.toUpperCase()}...`);
-
-                // Get current balance of Wallet 2
-                const balanceResponse = await wallets[2].nwcClient.getBalance();
-                // Convert from millisats to sats
-                const currentBalance = Math.round(balanceResponse.balance / 1000);
-
-                // Get current Bitcoin prices
-                const response = await fetch('https://mempool.space/api/v1/prices');
-                const priceData = await response.json();
-
-                const currentPrice = priceData[currency.toUpperCase()];
-                if (!currentPrice) {
-                    throw new Error(`Preis für ${currency.toUpperCase()} nicht verfügbar`);
-                }
-
-                // Calculate target value in selected currency
-                const targetValue = (currentBalance / 100000000) * currentPrice;
-
-                // Store stabilization data
-                stabilizationData = {
-                    active: true,
-                    currency: currency,
-                    initialBalance: currentBalance,
-                    targetValue: targetValue,
-                    initialPrice: currentPrice,
-                    checkInterval: null,
-                    threshold: 1,
-                    lastRebalanceTime: 0,
-                    rebalanceMinInterval: 5000,
-                    errorCount: 0,
-                    maxErrors: 5
-                };
-
-                // Update UI
-                updateStabilizationUI();
-
-                // Start monitoring with longer interval to reduce timeout issues
-                stabilizationData.checkInterval = setInterval(checkRebalancing, 15000); // every 15 seconds
-
-                log(`💱 Stabilisierung aktiv: ${currentBalance} sats = ${targetValue.toFixed(2)} ${currency.toUpperCase()}`);
-                log(`💱 Überwachung gestartet (alle 15 Sekunden mit Timeout-Schutz)`);
-
-            } catch (error) {
-                log(`💱 Fehler beim Starten der Stabilisierung: ${error.message}`);
-                console.error('Stabilization start error:', error);
-            }
-        }
-
-        async function stopStabilization() {
-            if (!stabilizationData.active) return;
-
-            log('💱 Stabilisierung wird gestoppt...');
-
-            // Clear monitoring interval
-            if (stabilizationData.checkInterval) {
-                clearInterval(stabilizationData.checkInterval);
-            }
-
-            // Reset stabilization data
-            stabilizationData = {
-                active: false,
-                currency: null,
-                initialBalance: 0,
-                targetValue: 0,
-                initialPrice: 0,
-                checkInterval: null,
-                threshold: 1,
-                lastRebalanceTime: 0,
-                rebalanceMinInterval: 5000,
-                errorCount: 0,
-                maxErrors: 5
-            };
-
-            // Update UI
-            updateStabilizationUI();
-
-            log('💱 Stabilisierung gestoppt');
-        }
-
-        async function checkRebalancing() {
-            if (!stabilizationData.active) return;
-
-            try {
-                // Get current prices
-                const response = await fetch('https://mempool.space/api/v1/prices');
-                const priceData = await response.json();
-                const currentPrice = priceData[stabilizationData.currency.toUpperCase()];
-
-                // Get current balance of Wallet 2
-                const balanceResponse = await wallets[2].nwcClient.getBalance();
-                // Convert from millisats to sats
-                const currentBalance = Math.round(balanceResponse.balance / 1000);
-
-                // Calculate current value in target currency
-                const currentValue = (currentBalance / 100000000) * currentPrice;
-
-                // Calculate required balance to maintain target value
-                const requiredBalance = Math.round((stabilizationData.targetValue / currentPrice) * 100000000);
-                const difference = currentBalance - requiredBalance;
-
-                // Update status display
-                updateStabilizationStatus(currentBalance, currentValue, requiredBalance, difference);
-
-                // Update wallet displays
-                updateWalletStabilizationDisplay();
-
-                // Check if rebalancing is needed and allowed
-                const now = Date.now();
-                const timeSinceLastRebalance = now - stabilizationData.lastRebalanceTime;
-
-                // Debug logging
-                log(`💱 Debug: difference=${difference}, abs=${Math.abs(difference)}, lastRebalance=${stabilizationData.lastRebalanceTime}, timeSince=${timeSinceLastRebalance}`);
-
-                // Get current threshold from UI
-                const currentThreshold = parseInt(document.getElementById('rebalance-threshold').value) || 1;
-                stabilizationData.threshold = currentThreshold;
-
-                if (Math.abs(difference) >= stabilizationData.threshold) {
-                    if (timeSinceLastRebalance >= stabilizationData.rebalanceMinInterval) {
-                        log(`💱 Rebalancing benötigt: ${difference > 0 ? '+' : ''}${difference} sats Differenz`);
-                        await performRebalancing(difference);
-                    } else {
-                        const waitTime = Math.round((stabilizationData.rebalanceMinInterval - timeSinceLastRebalance) / 1000);
-                        if (!isNaN(waitTime) && waitTime > 0) {
-                            log(`💱 Rebalancing erforderlich (${difference > 0 ? '+' : ''}${difference} sats), aber warte noch ${waitTime}s (Cooldown)`);
-                        } else {
-                            log(`💱 Rebalancing erforderlich (${difference > 0 ? '+' : ''}${difference} sats), starte sofort`);
-                            await performRebalancing(difference);
-                        }
-                    }
-                } else {
-                    // Log when difference is below threshold
-                    if (Math.abs(difference) > 0) {
-                        log(`💱 Kleine Differenz: ${difference > 0 ? '+' : ''}${difference} sats (unter ${stabilizationData.threshold} sats Threshold)`);
-                    }
-                }
-
-                // Reset error counter on successful check
-                stabilizationData.errorCount = 0;
-
-            } catch (error) {
-                stabilizationData.errorCount++;
-                log(`💱 Fehler bei Rebalancing-Check (${stabilizationData.errorCount}/${stabilizationData.maxErrors}): ${error.message}`);
-                console.error('Rebalancing check error:', error);
-
-                // Stop stabilization if too many errors
-                if (stabilizationData.errorCount >= stabilizationData.maxErrors) {
-                    log(`💱 Zu viele Fehler (${stabilizationData.maxErrors}), stoppe Stabilisierung`);
-                    stopStabilization();
-                }
-            }
-        }
-
-        async function performRebalancing(difference) {
-            const amount = Math.abs(difference);
-
-            try {
-                log(`💱 Starte Rebalancing: ${amount} sats (${difference > 0 ? 'Wallet 2 → Wallet 1' : 'Wallet 1 → Wallet 2'})`);
-
-                // Add timeout wrapper for all operations
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Operation timed out after 30 seconds')), 30000)
-                );
-
-                if (difference > 0) {
-                    // Wallet 2 has too much -> send excess to Wallet 1
-
-                    // Create invoice on Wallet 1 with timeout
-                    const invoicePromise = wallets[1].nwcClient.makeInvoice({
-                        amount: amount * 1000, // Convert sats to millisats
-                        description: `Stabilization: excess ${amount} sats (${stabilizationData.currency.toUpperCase()})`
-                    });
-
-                    const invoice = await Promise.race([invoicePromise, timeoutPromise]);
-                    log(`💱 Invoice erstellt: ${amount} sats`);
-
-                    // Pay invoice from Wallet 2 with timeout
-                    const paymentPromise = wallets[2].nwcClient.payInvoice({
-                        invoice: invoice.invoice
-                    });
-
-                    const payment = await Promise.race([paymentPromise, timeoutPromise]);
-                    log(`💱 Rebalancing erfolgreich: ${amount} sats übertragen (Wallet 2 → Wallet 1)`);
-
-                } else {
-                    // Wallet 2 has too little -> receive from Wallet 1
-
-                    // Create invoice on Wallet 2 with timeout
-                    const invoicePromise = wallets[2].nwcClient.makeInvoice({
-                        amount: amount * 1000, // Convert sats to millisats
-                        description: `Stabilization: deficit ${amount} sats (${stabilizationData.currency.toUpperCase()})`
-                    });
-
-                    const invoice = await Promise.race([invoicePromise, timeoutPromise]);
-                    log(`💱 Invoice erstellt: ${amount} sats`);
-
-                    // Pay invoice from Wallet 1 with timeout
-                    const paymentPromise = wallets[1].nwcClient.payInvoice({
-                        invoice: invoice.invoice
-                    });
-
-                    const payment = await Promise.race([paymentPromise, timeoutPromise]);
-                    log(`💱 Rebalancing erfolgreich: ${amount} sats übertragen (Wallet 1 → Wallet 2)`);
-                }
-
-                // Update last rebalance time
-                stabilizationData.lastRebalanceTime = Date.now();
-                stabilizationData.errorCount = 0; // Reset error counter on success
-
-            } catch (error) {
-                stabilizationData.errorCount++;
-
-                if (error.message.includes('timed out')) {
-                    log(`💱 Rebalancing Timeout: ${error.message}`);
-                    log(`💱 Möglicherweise Relay-Verbindungsprobleme. Versuche beim nächsten Zyklus erneut.`);
-                } else if (error.message.includes('insufficient')) {
-                    log(`💱 Rebalancing fehlgeschlagen: Unzureichende Balance`);
-                } else {
-                    log(`💱 Rebalancing fehlgeschlagen: ${error.message}`);
-                }
-
-                console.error('Rebalancing error:', error);
-
-                // If too many consecutive errors, pause rebalancing for longer
-                if (stabilizationData.errorCount >= 3) {
-                    stabilizationData.lastRebalanceTime = Date.now();
-                    log(`💱 Pausiere Rebalancing für 2 Minuten nach ${stabilizationData.errorCount} Fehlern`);
-                    setTimeout(() => {
-                        stabilizationData.lastRebalanceTime = 0;
-                        log(`💱 Rebalancing wieder bereit`);
-                    }, 120000); // 2 minutes pause
-                }
-            }
-        }
-
-        function updateStabilizationUI() {
-            const currencySelect = document.getElementById('stabilization-currency');
-            const startBtn = document.getElementById('start-stabilization');
-            const stopBtn = document.getElementById('stop-stabilization');
-            const thresholdInput = document.getElementById('rebalance-threshold');
-
-            if (stabilizationData.active) {
-                currencySelect.disabled = true;
-                thresholdInput.disabled = true;
-                startBtn.disabled = true;
-                stopBtn.disabled = false;
-            } else {
-                currencySelect.disabled = false;
-                thresholdInput.disabled = false;
-                startBtn.disabled = !currencySelect.value || !wallets[1].isConnected || !wallets[2].isConnected;
-                stopBtn.disabled = true;
-            }
-        }
-
-        function updateStabilizationStatus(currentBalance, currentValue, requiredBalance, difference) {
-            const statusElement = document.getElementById('stabilization-status');
-            const infoElement = document.getElementById('stabilization-info');
-
-            if (stabilizationData.active) {
-                const currency = stabilizationData.currency.toUpperCase();
-                const targetValue = stabilizationData.targetValue;
-
-                statusElement.className = 'alert alert-success py-2 px-3 mb-2';
-                statusElement.innerHTML = `Status: Aktiv (${currency})`;
-
-                infoElement.innerHTML = `
-                    <div><strong>Zielwert:</strong> ${targetValue.toFixed(2)} ${currency}</div>
-                    <div><strong>Aktueller Wert:</strong> ${currentValue.toFixed(2)} ${currency}</div>
-                    <div><strong>Balance:</strong> ${currentBalance.toLocaleString()} sats</div>
-                    <div><strong>Soll-Balance:</strong> ${requiredBalance.toLocaleString()} sats</div>
-                    <div><strong>Differenz:</strong> ${difference > 0 ? '+' : ''}${difference.toLocaleString()} sats</div>
-                `;
-            } else {
-                statusElement.className = 'alert alert-secondary py-2 px-3 mb-2';
-                statusElement.innerHTML = 'Status: Nicht aktiv';
-                infoElement.innerHTML = '';
-            }
-        }
-
-        // Update stabilization UI when wallet connections change
-        function updateStabilizationUIOnConnect() {
-            updateStabilizationUI();
-            updateWalletStabilizationDisplay();
-        }
-
-        async function updateWalletStabilizationDisplay() {
-            // Update Wallet 1 display
-            await updateSingleWalletDisplay(1);
-            // Update Wallet 2 display
-            await updateSingleWalletDisplay(2);
-            // Update transaction displays
-            await updateWalletTransactions(1);
-            await updateWalletTransactions(2);
-        }
-
-        async function updateSingleWalletDisplay(walletId) {
-            const infoElement = document.getElementById(`wallet${walletId}-stabilization-info`);
-
-            if (!wallets[walletId].isConnected) {
-                infoElement.innerHTML = `
-                    <div class="text-center text-muted py-3">
-                        <i class="fas fa-info-circle"></i>
-                        <div>Wallet ${walletId} verbinden um Daten anzuzeigen</div>
-                    </div>
-                `;
-                return;
-            }
-
-            try {
-                // Get wallet balance
-                const balanceResponse = await wallets[walletId].nwcClient.getBalance();
-                const balanceSats = Math.round(balanceResponse.balance / 1000);
-
-                // Get current Bitcoin price
-                const priceResponse = await fetch('https://mempool.space/api/v1/prices');
-                const priceData = await priceResponse.json();
-
-                // Calculate values for different currencies
-                const currencies = {
-                    USD: { symbol: '$', value: priceData.USD },
-                    EUR: { symbol: '€', value: priceData.EUR },
-                    GBP: { symbol: '£', value: priceData.GBP },
-                    CHF: { symbol: '₣', value: priceData.CHF },
-                    CAD: { symbol: 'C$', value: priceData.CAD },
-                    JPY: { symbol: '¥', value: priceData.JPY }
-                };
-
-                let currencyDisplays = '';
-                Object.entries(currencies).forEach(([code, data]) => {
-                    const value = (balanceSats / 100000000) * data.value;
-                    currencyDisplays += `
-                        <div class="d-flex justify-content-between mb-1">
-                            <span class="small">${code}:</span>
-                            <span class="small fw-bold">${data.symbol}${value.toFixed(2)}</span>
-                        </div>
-                    `;
-                });
-
-                // Show stabilization status for Wallet 2
-                let stabilizationStatus = '';
-                if (walletId === 2 && stabilizationData.active) {
-                    const targetCurrency = stabilizationData.currency.toUpperCase();
-                    const currentValue = (balanceSats / 100000000) * currencies[targetCurrency].value;
-                    const targetValue = stabilizationData.targetValue;
-                    const difference = currentValue - targetValue;
-
-                    stabilizationStatus = `
-                        <div class="border-top pt-2 mt-2">
-                            <div class="small text-success">
-                                <strong>🎯 Stabilisierung aktiv (${targetCurrency})</strong>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="small">Zielwert:</span>
-                                <span class="small">${currencies[targetCurrency].symbol}${targetValue.toFixed(2)}</span>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="small">Differenz:</span>
-                                <span class="small ${difference >= 0 ? 'text-success' : 'text-danger'}">
-                                    ${difference >= 0 ? '+' : ''}${currencies[targetCurrency].symbol}${difference.toFixed(2)}
-                                </span>
-                            </div>
-                        </div>
-                    `;
-                }
-
-                infoElement.innerHTML = `
-                    <div class="mb-2">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span class="fw-bold">Balance:</span>
-                            <span class="fw-bold text-primary">${balanceSats.toLocaleString()} sats</span>
-                        </div>
-                        <div class="border-top pt-2">
-                            <div class="small text-muted mb-1">Währungswerte:</div>
-                            ${currencyDisplays}
-                        </div>
-                        ${stabilizationStatus}
-                    </div>
-                `;
-
-            } catch (error) {
-                infoElement.innerHTML = `
-                    <div class="text-center text-danger py-3">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <div>Fehler beim Laden der Wallet-Daten</div>
-                        <small>${error.message}</small>
-                    </div>
-                `;
-            }
-        }
-
-        async function updateWalletTransactions(walletId) {
-            const transactionsElement = document.getElementById(`wallet${walletId}-transactions`);
-
-            if (!wallets[walletId].isConnected) {
-                transactionsElement.innerHTML = `
-                    <div class="text-center text-muted py-3">
-                        <i class="fas fa-info-circle"></i>
-                        <div>Wallet ${walletId} verbinden um Transaktionen anzuzeigen</div>
-                    </div>
-                `;
-                return;
-            }
-
-            // Check if we already know transactions are not supported
-            if (wallets[walletId].transactionsSupported === false) {
-                transactionsElement.innerHTML = `
-                    <div class="text-center text-warning py-3">
-                        <i class="fas fa-clock"></i>
-                        <div>Transaktionen nicht verfügbar</div>
-                        <small class="text-muted">NWC Provider unterstützt diese Funktion nicht</small>
-                    </div>
-                `;
-                return;
-            }
-
-            // Show loading state only on first attempt
-            if (wallets[walletId].transactionsSupported === null) {
-                transactionsElement.innerHTML = `
-                    <div class="text-center text-muted py-3">
-                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-                        <div>Transaktionen werden geladen...</div>
-                    </div>
-                `;
-            }
-
-            try {
-                // Use the existing working listTransactions logic
-                const transactionResponse = await wallets[walletId].nwcClient.listTransactions({
-                    from: 0,
-                    until: Math.floor(Date.now() / 1000),
-                    limit: 10, // Only get last 10 for the UI
-                    offset: 0,
-                    unpaid: false,
-                    type: undefined
-                });
-
-                let transactions = transactionResponse.transactions || transactionResponse;
-
-                // If that fails, try without parameters as fallback
-                if (!transactions || transactions.length === 0) {
-                    const fallbackResponse = await wallets[walletId].nwcClient.listTransactions({});
-                    transactions = fallbackResponse.transactions || fallbackResponse;
-                }
-
-                // Mark as supported if we get here
-                wallets[walletId].transactionsSupported = true;
-
-                if (!transactions || transactions.length === 0) {
-                    transactionsElement.innerHTML = `
-                        <div class="text-center text-muted py-3">
-                            <i class="fas fa-inbox"></i>
-                            <div>Keine Transaktionen gefunden</div>
-                        </div>
-                    `;
-                    return;
-                }
-
-                // Sort transactions by date (newest first) and limit to last 10
-                const sortedTransactions = transactions
-                    .sort((a, b) => b.created_at - a.created_at)
-                    .slice(0, 10);
-
-                let transactionHtml = '';
-                sortedTransactions.forEach(tx => {
-                    const date = new Date(tx.created_at * 1000);
-                    const amountSats = Math.round(tx.amount / 1000); // Convert millisats to sats
-                    const txType = tx.type || 'payment';
-
-                    // Determine if transaction is incoming or outgoing
-                    let isIncoming = false;
-                    let icon = '💸';
-                    let colorClass = 'text-danger';
-                    let typeText = 'Ausgehend';
-
-                    // Check transaction type first, then amount as fallback
-                    if (txType === 'incoming') {
-                        isIncoming = true;
-                        icon = '📥';
-                        colorClass = 'text-success';
-                        typeText = 'Empfangen';
-                    } else if (txType === 'outgoing') {
-                        isIncoming = false;
-                        icon = '📤';
-                        colorClass = 'text-danger';
-                        typeText = 'Gesendet';
-                    } else {
-                        // Fallback: use amount sign to determine direction
-                        isIncoming = amountSats > 0;
-                        if (isIncoming) {
-                            icon = '💰';
-                            colorClass = 'text-success';
-                            typeText = 'Eingehend';
-                        }
-                    }
-
-                    // Format description
-                    let description = tx.description || tx.memo || 'Keine Beschreibung';
-                    if (description.length > 40) {
-                        description = description.substring(0, 40) + '...';
-                    }
-
-                    transactionHtml += `
-                        <div class="border-bottom px-3 py-2">
-                            <div class="d-flex justify-content-between align-items-start mb-1">
-                                <div class="d-flex align-items-center">
-                                    <span class="me-2">${icon}</span>
-                                    <div>
-                                        <div class="small fw-bold ${colorClass}">
-                                            ${isIncoming ? '+' : '-'}${Math.abs(amountSats).toLocaleString()} sats
-                                        </div>
-                                        <div class="text-muted" style="font-size: 0.75rem;">
-                                            ${typeText}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <div class="text-muted small">
-                                        ${date.toLocaleString('de-DE', {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="small text-muted" style="font-size: 0.75rem;">
-                                ${description}
-                            </div>
-                        </div>
-                    `;
-                });
-
-                transactionsElement.innerHTML = transactionHtml;
-
-            } catch (error) {
-                console.warn(`Wallet ${walletId} transactions error:`, error.message);
-
-                // Determine if it's a timeout or other error
-                const isTimeout = error.message.includes('Timeout') || error.message.includes('reply timeout');
-
-                if (isTimeout) {
-                    // Mark transactions as unsupported for this wallet
-                    wallets[walletId].transactionsSupported = false;
-
-                    transactionsElement.innerHTML = `
-                        <div class="text-center text-warning py-3">
-                            <i class="fas fa-clock"></i>
-                            <div>Transaktionen nicht verfügbar</div>
-                            <small class="text-muted">NWC Provider unterstützt diese Funktion nicht</small>
-                        </div>
-                    `;
-                } else {
-                    // For non-timeout errors, still mark as unsupported to avoid retries
-                    wallets[walletId].transactionsSupported = false;
-
-                    transactionsElement.innerHTML = `
-                        <div class="text-center text-danger py-3">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            <div>Fehler beim Laden der Transaktionen</div>
-                            <small class="text-muted">${error.message}</small>
-                        </div>
-                    `;
-                }
-            }
-        }
-
-        // Chart Functions
-        function initializePriceChart() {
-            const ctx = document.getElementById('priceChart').getContext('2d');
-
-            priceChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: 'USD ($)',
-                            data: [],
-                            borderColor: '#0066cc',
-                            backgroundColor: 'rgba(0, 102, 204, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4,
-                            pointRadius: 1,
-                            yAxisID: 'y'
-                        },
-                        {
-                            label: 'EUR (€)',
-                            data: [],
-                            borderColor: '#dc3545',
-                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4,
-                            pointRadius: 1,
-                            yAxisID: 'y'
-                        },
-                        {
-                            label: 'GBP (£)',
-                            data: [],
-                            borderColor: '#28a745',
-                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4,
-                            pointRadius: 1,
-                            yAxisID: 'y'
-                        },
-                        {
-                            label: 'CHF',
-                            data: [],
-                            borderColor: '#ffc107',
-                            backgroundColor: 'rgba(255, 193, 7, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4,
-                            pointRadius: 1,
-                            yAxisID: 'y'
-                        },
-                        {
-                            label: 'CAD',
-                            data: [],
-                            borderColor: '#6f42c1',
-                            backgroundColor: 'rgba(111, 66, 193, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4,
-                            pointRadius: 1,
-                            yAxisID: 'y'
-                        },
-                        {
-                            label: 'JPY (¥)',
-                            data: [],
-                            borderColor: '#fd7e14',
-                            backgroundColor: 'rgba(253, 126, 20, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4,
-                            pointRadius: 1,
-                            yAxisID: 'y1'
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top',
-                            onClick: function(e, legendItem, legend) {
-                                const index = legendItem.datasetIndex;
-                                const chart = legend.chart;
-                                const isVisible = chart.isDatasetVisible(index);
-                                chart.setDatasetVisibility(index, !isVisible);
-                                chart.update('none');
-                            }
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            callbacks: {
-                                title: function(context) {
-                                    return 'Bitcoin Preis';
-                                },
-                                label: function(context) {
-                                    const currency = context.dataset.label;
-                                    const value = context.parsed.y;
-                                    return `${currency}: ${value.toLocaleString('de-DE')}`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            type: 'linear',
-                            position: 'bottom',
-                            min: function(context) {
-                                const data = context.chart.data.labels;
-                                return data.length > 0 ? Math.min(...data) : 0;
-                            },
-                            max: function(context) {
-                                const data = context.chart.data.labels;
-                                return data.length > 0 ? Math.max(...data) : 0;
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.1)'
-                            },
-                            ticks: {
-                                callback: function(value) {
-                                    const date = new Date(value);
-                                    return date.toLocaleTimeString('de-DE', {
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                    });
-                                },
-                                maxTicksLimit: 8
-                            }
-                        },
-                        y: {
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            beginAtZero: false,
-                            title: {
-                                display: true,
-                                text: 'USD/EUR/GBP/CHF/CAD'
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.1)'
-                            }
-                        },
-                        y1: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            beginAtZero: false,
-                            title: {
-                                display: true,
-                                text: 'JPY (¥)'
-                            },
-                            grid: {
-                                drawOnChartArea: false
-                            }
-                        }
-                    }
-                }
-            });
-
-            // Update chart initially
-            updatePriceChart();
-        }
-
-        function updatePriceChart() {
-            if (!priceChart) return;
-
-            // Get selected time range
-            const selectedRange = document.querySelector('input[name="timeRange"]:checked')?.value || '12h';
-            const history = getFilteredPriceHistory(selectedRange);
-
-            if (history.length === 0) {
-                priceChart.data.labels = [];
-                priceChart.data.datasets.forEach(dataset => {
-                    dataset.data = [];
-                });
-                priceChart.update();
-                return;
-            }
-
-            // Prepare data for chart
-            const labels = history.map(item => item.timestamp);
-            const currencies = ['USD', 'EUR', 'GBP', 'CHF', 'CAD', 'JPY'];
-
-            // Update chart data
-            priceChart.data.labels = labels;
-
-            currencies.forEach((currency, index) => {
-                const dataPoints = history.map((item) => ({
-                    x: item.timestamp,
-                    y: item.prices[currency]
-                }));
-                priceChart.data.datasets[index].data = dataPoints;
-            });
-
-            // Update chart
-            priceChart.update('none'); // No animation for smoother updates
-        }
-
-        function getCurrencySymbol(currency) {
-            const symbols = {
-                'USD': '$',
-                'EUR': '€',
-                'GBP': '£',
-                'CHF': '₣',
-                'CAD': 'C$',
-                'JPY': '¥'
-            };
-            return symbols[currency] || '';
-        }
-
-        // Save/Load Connection String Functions
-        function saveConnectionString(walletId) {
-            const nwcUrl = document.getElementById(`nwc-url-${walletId}`).value;
-            if (!nwcUrl) {
-                alert('Kein Connection String zum Speichern vorhanden');
-                return;
-            }
-            saveNWCString(walletId, nwcUrl);
-        }
-
-        function clearConnectionString(walletId) {
-            clearNWCString(walletId);
-            document.getElementById(`nwc-url-${walletId}`).value = '';
-        }
-
-        function loadSavedConnectionStrings() {
-            // Load saved connection strings for both wallets
-            for (let walletId = 1; walletId <= 2; walletId++) {
-                const savedUrl = loadNWCString(walletId);
-                if (savedUrl) {
-                    const textarea = document.getElementById(`nwc-url-${walletId}`);
-                    textarea.value = savedUrl;
-                    // Ensure the text is properly masked
-                    textarea.style.webkitTextSecurity = 'disc';
-                    log(`Wallet ${walletId}: Gespeicherter NWC String geladen`);
-                }
-            }
-        }
-
-        // Make functions globally available
-        window.connectWallet = connectWallet;
-        window.disconnectWallet = disconnectWallet;
-        window.getWalletInfo = getWalletInfo;
-        window.getBalance = getBalance;
-        window.createInvoice = createInvoice;
-        window.payInvoice = payInvoice;
-        window.listTransactions = listTransactions;
-        window.payKeysend = payKeysend;
-        window.clearLog = clearLog;
-        window.fetchBitcoinPrice = fetchBitcoinPrice;
-        window.startPriceUpdates = startPriceUpdates;
-        window.stopPriceUpdates = stopPriceUpdates;
-        window.startStabilization = startStabilization;
-        window.stopStabilization = stopStabilization;
-        window.saveConnectionString = saveConnectionString;
-        window.clearConnectionString = clearConnectionString;
-        window.fetchHistoricalPrices = fetchHistoricalPrices;
-        window.updatePriceChart = updatePriceChart;
-        window.clearAndReloadPriceData = clearAndReloadPriceData;
-        window.toggleConnectionVisibility = toggleConnectionVisibility;
-
-        // Initialize
-        window.addEventListener('load', () => {
-            log('NWC Demo Seite geladen');
-            log('ECHTE NWC INTEGRATION mit lokalen Dependencies - Verwenden Sie echte Wallet Connection Strings!');
-            log('Unterstützte Wallets: Alby Hub, Coinos, Primal, lnwallet.app, Yakihonne...');
-
-            // Start Bitcoin price updates
-            startPriceUpdates();
-
-            // Setup currency selection handler
-            document.getElementById('stabilization-currency').addEventListener('change', updateStabilizationUI);
-
-            // Initialize stabilization UI
-            updateStabilizationUI();
-
-            // Load saved connection strings
-            loadSavedConnectionStrings();
-
-            // Initialize price chart
-            initializePriceChart();
-
-
-            // Load historical prices on first load if no data exists
-            const existingHistory = getPriceHistory();
-            if (existingHistory.length === 0) {
-                fetchHistoricalPrices();
-            }
-        });
-    </script>
-</body>
-</html>
+</body></html>
