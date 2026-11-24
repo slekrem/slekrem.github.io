@@ -105,7 +105,7 @@
       <div id="status"></div>
       <div class="reihe" style="justify-content:center; margin-top:8px">
         <button id="btn-beitreten" class="primaer versteckt">Partie beitreten</button>
-        <button id="btn-link">Link kopieren</button>
+        <button id="btn-link">Link teilen</button>
         <button id="btn-aufgeben">Aufgeben</button>
         <button id="btn-lobby">Zur Lobby</button>
       </div>
@@ -356,8 +356,13 @@ function liste(sel, eintraege, leer, text) {
   }
 }
 
-pool.subscribeMany(RELAYS, { kinds: [KIND], '#t': [TAG], since: jetzt() - 2 * 86400, limit: 500 },
-  { onevent: verarbeite });
+let lobbySub = null;
+function abonniereLobby() {
+  lobbySub?.close();
+  lobbySub = pool.subscribeMany(RELAYS, { kinds: [KIND], '#t': [TAG], since: jetzt() - 2 * 86400, limit: 500 },
+    { onevent: verarbeite });
+}
+abonniereLobby();
 
 for (const btn of document.querySelectorAll('[data-farbe]')) {
   btn.onclick = async () => {
@@ -384,10 +389,22 @@ function oeffne(g) {
   $('#sende-info').textContent = '';
   if (!aktuell) return zeigeLobby();
   $('#partie-id').textContent = 'Partie ' + aktuell;
-  partieSub = pool.subscribeMany(RELAYS, { kinds: [KIND], '#g': [aktuell] }, { onevent: verarbeite });
+  abonnierePartie();
   zeichne();
 }
+function abonnierePartie() {
+  partieSub?.close(); partieSub = null;
+  if (aktuell) partieSub = pool.subscribeMany(RELAYS, { kinds: [KIND], '#g': [aktuell] }, { onevent: verarbeite });
+}
 window.addEventListener('hashchange', () => oeffne(location.hash.slice(1)));
+
+// iOS trennt Verbindungen, wenn die Seite im Hintergrund ist (z. B. beim Wechsel zu iMessage).
+// Beim Zurückkommen und regelmäßig neu abonnieren; doppelte Events werden über die ID verworfen.
+function auffrischen() { if (document.visibilityState !== 'visible') return; abonniereLobby(); abonnierePartie(); }
+document.addEventListener('visibilitychange', auffrischen);
+window.addEventListener('pageshow', auffrischen);
+window.addEventListener('online', auffrischen);
+setInterval(() => { if (aktuell && document.visibilityState === 'visible') abonnierePartie(); }, 20000);
 
 function zeichne() {
   const p = baue(aktuell);
@@ -485,6 +502,10 @@ $('#btn-aufgeben').onclick = async () => {
 };
 $('#btn-link').onclick = async () => {
   const url = location.href;
+  if (navigator.share) {  // iPhone: normales Teilen-Menü (iMessage, WhatsApp, …)
+    try { await navigator.share({ title: 'Nostr-Schach', text: 'Spiel eine Partie Schach mit mir:', url }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
   try { await navigator.clipboard.writeText(url); $('#sende-info').textContent = 'Link kopiert.'; }
   catch { prompt('Link zum Teilen:', url); }
 };
