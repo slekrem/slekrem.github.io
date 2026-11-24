@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nostr-Schach</title>
+<meta name="description" content="Einfaches Schach über Nostr – dezentral, direkt im Browser.">
+<!-- Figuren: cburnett-SVGs aus chessground (eingebettet als data-URIs) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9.2.1/assets/chessground.cburnett.css">
+<style>
+  :root {
+    --bg: #f4f1ea; --fg: #1d1d1b; --muted: #6b6860; --card: #ffffff; --line: #ddd8cc;
+    --hell: #ecd9b4; --dunkel: #b58863; --akzent: #7b4fd6; --ok: #2e8b57; --warn: #c0392b;
+    --markiert: rgba(123, 79, 214, .45); --letzter: rgba(255, 214, 10, .45);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17161a; --fg: #ece9e1; --muted: #9a968c; --card: #222126; --line: #35333a;
+            --hell: #c9b48f; --dunkel: #8a6648; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex;
+           align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; }
+  header h1 a { color: inherit; text-decoration: none; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  main { max-width: 1060px; margin: 0 auto; padding: 16px; display: grid; gap: 16px;
+         grid-template-columns: minmax(0, 1fr) 320px; }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+  .karte { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .karte h2 { margin: 0 0 10px; font-size: 15px; }
+  aside { display: grid; gap: 16px; align-content: start; }
+  button { font: inherit; padding: 7px 12px; border-radius: 7px; border: 1px solid var(--line);
+           background: var(--bg); color: var(--fg); cursor: pointer; }
+  button.primaer { background: var(--akzent); border-color: var(--akzent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .reihe { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .relay { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .punkt { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .punkt.an { background: var(--ok); }
+  .punkt.aus { background: var(--warn); }
+  ul.partien { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  ul.partien li { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  #brett { width: min(100%, 560px); aspect-ratio: 1; display: grid; margin: 0 auto;
+           grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); border-radius: 6px; overflow: hidden;
+           box-shadow: 0 2px 10px rgba(0,0,0,.2); user-select: none; }
+  .feld { position: relative; cursor: pointer; min-width: 0; min-height: 0; }
+  .feld.h { background: var(--hell); } .feld.d { background: var(--dunkel); }
+  .feld.letzter::before { content: ""; position: absolute; inset: 0; background: var(--letzter); }
+  .feld.gewaehlt::before { content: ""; position: absolute; inset: 0; background: var(--markiert); }
+  .feld.ziel::after { content: ""; position: absolute; width: 28%; height: 28%; border-radius: 50%;
+                      background: var(--markiert); }
+  .feld.schach { box-shadow: inset 0 0 0 4px var(--warn); }
+  .cg-wrap piece { position: absolute; inset: 4%; z-index: 1; display: block;
+                   background-size: contain; background-repeat: no-repeat; background-position: center; }
+  .koord { position: absolute; font-size: 10px; opacity: .7; z-index: 1; color: #000; }
+  .koord.r { left: 3px; top: 2px; } .koord.f { right: 3px; bottom: 1px; }
+  #status { text-align: center; font-weight: 600; margin: 12px 0 4px; min-height: 1.5em; }
+  #zuege { max-height: 180px; overflow: auto; }
+  .hinweis { padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: 13px; }
+  .versteckt { display: none !important; }
+  input[type=text] { font: inherit; width: 100%; padding: 7px 9px; border-radius: 7px;
+                     border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="#">Nostr-Schach</a></h1>
+  <span class="sub">Proof of Concept · dezentral über öffentliche Nostr-Relays</span>
+</header>
+
+<main>
+  <section>
+    <!-- Lobby -->
+    <div id="lobby" class="karte">
+      <h2>Neue Partie</h2>
+      <div class="reihe">
+        <span class="muted">Ich spiele</span>
+        <button class="primaer" data-farbe="w">Weiß</button>
+        <button class="primaer" data-farbe="b">Schwarz</button>
+        <button class="primaer" data-farbe="z">Zufall</button>
+      </div>
+      <p class="muted">Nach dem Anlegen bekommst du einen Link für deinen Gegner. Offene Partien
+        erscheinen auch unten für alle, die die Seite gerade geöffnet haben.</p>
+      <h2>Offene Partien</h2>
+      <ul id="offen" class="partien"><li class="muted">Suche auf den Relays …</li></ul>
+      <h2 style="margin-top:14px">Meine Partien</h2>
+      <ul id="meine" class="partien"><li class="muted">Noch keine.</li></ul>
+    </div>
+
+    <!-- Partie -->
+    <div id="partie" class="karte versteckt">
+      <div class="reihe" style="justify-content:space-between">
+        <span id="gegner-oben" class="muted"></span>
+        <span class="muted mono" id="partie-id"></span>
+      </div>
+      <div id="brett" class="cg-wrap" style="margin-top:8px"></div>
+      <div class="reihe" style="justify-content:space-between; margin-top:6px">
+        <span id="gegner-unten" class="muted"></span>
+      </div>
+      <div id="status"></div>
+      <div class="reihe" style="justify-content:center; margin-top:8px">
+        <button id="btn-beitreten" class="primaer versteckt">Partie beitreten</button>
+        <button id="btn-link">Link kopieren</button>
+        <button id="btn-aufgeben">Aufgeben</button>
+        <button id="btn-lobby">Zur Lobby</button>
+      </div>
+      <p id="sende-info" class="muted" style="text-align:center"></p>
+    </div>
+  </section>
+
+  <aside>
+    <div class="karte">
+      <h2>Identität</h2>
+      <div id="ich" class="mono"></div>
+      <p id="ich-art" class="muted"></p>
+      <div class="reihe">
+        <button id="btn-neu">Neue Identität</button>
+        <button id="btn-import">nsec importieren</button>
+        <button id="btn-export">nsec anzeigen</button>
+        <button id="btn-nip07" class="versteckt">Browser-Erweiterung</button>
+      </div>
+      <p class="muted">Der Schlüssel liegt nur in diesem Browser (localStorage). Für echte Konten lieber
+        eine Erweiterung (NIP-07) nutzen.</p>
+    </div>
+
+    <div class="karte">
+      <h2>Relays</h2>
+      <div id="relays" style="display:grid; gap:4px"></div>
+    </div>
+
+    <div id="zuege-karte" class="karte versteckt">
+      <h2>Züge</h2>
+      <div id="zuege" class="mono"></div>
+    </div>
+  </aside>
+</main>
+
+<script type="module">
+import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, nip19 }
+  from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.25.5/+esm';
+import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm';
+
+// ---------------------------------------------------------------------------
+// Protokoll
+//   kind 6464 (regulär), Tags: ["t","nostr-schach"], ["g",<partie-id>]
+//   content (JSON):
+//     {"t":"create","farbe":"w"|"b"}            Ersteller und seine Farbe
+//     {"t":"join"}                              erster fremder Beitritt = Gegner
+//     {"t":"move","ply":n,"from":"e2","to":"e4","promotion":"q","san":"e4"}
+//     {"t":"resign"}
+//   Jeder Client baut die Partie aus allen Events selbst nach und prüft jeden Zug.
+// ---------------------------------------------------------------------------
+const KIND = 6464;
+const TAG = 'nostr-schach';
+const RELAYS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.primal.net',
+  'wss://relay.snort.social',
+  'wss://offchain.pub',
+  'wss://relay.nostr.net',
+  'wss://nostr.mom',
+];
+const LS_SK = 'nostr-schach.sk';
+const LS_NIP07 = 'nostr-schach.nip07';
+const LS_MEINE = 'nostr-schach.meine';
+
+const $ = (s) => document.querySelector(s);
+const pool = new SimplePool({ enableReconnect: true });
+const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+const unhex = (h) => Uint8Array.from(h.match(/../g).map((x) => parseInt(x, 16)));
+const kurz = (pk) => { const n = nip19.npubEncode(pk); return n.slice(0, 12) + '…' + n.slice(-6); };
+const jetzt = () => Math.floor(Date.now() / 1000);
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+// --- Identität -------------------------------------------------------------
+let sk = null, pk = null, nip07 = false;
+
+async function identitaetLaden() {
+  if (ls.get(LS_NIP07) === '1' && window.nostr) {
+    try { pk = await window.nostr.getPublicKey(); nip07 = true; sk = null; return zeigeIch(); }
+    catch { ls.del(LS_NIP07); }
+  }
+  const gespeichert = ls.get(LS_SK);
+  sk = gespeichert && /^[0-9a-f]{64}$/.test(gespeichert) ? unhex(gespeichert) : null;
+  if (!sk) { sk = generateSecretKey(); ls.set(LS_SK, hex(sk)); }
+  pk = getPublicKey(sk); nip07 = false;
+  zeigeIch();
+}
+
+function zeigeIch() {
+  $('#ich').textContent = nip19.npubEncode(pk);
+  $('#ich-art').textContent = nip07 ? 'Über Browser-Erweiterung (NIP-07)' : 'Lokaler Schlüssel in diesem Browser';
+  $('#btn-export').disabled = nip07;
+  $('#btn-nip07').classList.toggle('versteckt', !window.nostr || nip07);
+  if (aktuell) zeichne();
+  zeigeLobby();
+}
+
+async function signiere(vorlage) {
+  const ev = { created_at: jetzt(), tags: [], ...vorlage, kind: KIND };
+  if (nip07) return window.nostr.signEvent(ev);
+  return finalizeEvent(ev, sk);
+}
+
+$('#btn-neu').onclick = () => {
+  if (!confirm('Neue Identität erzeugen? Der bisherige lokale Schlüssel geht verloren, wenn du ihn nicht gesichert hast.')) return;
+  ls.del(LS_NIP07); sk = generateSecretKey(); ls.set(LS_SK, hex(sk)); pk = getPublicKey(sk); nip07 = false; zeigeIch();
+};
+$('#btn-import').onclick = () => {
+  const s = prompt('nsec eingeben:'); if (!s) return;
+  try {
+    const d = nip19.decode(s.trim()); if (d.type !== 'nsec') throw 0;
+    ls.del(LS_NIP07); sk = d.data; ls.set(LS_SK, hex(sk)); pk = getPublicKey(sk); nip07 = false; zeigeIch();
+  } catch { alert('Das ist kein gültiger nsec.'); }
+};
+$('#btn-export').onclick = () => {
+  if (!sk) return;
+  prompt('Dein geheimer Schlüssel (sicher aufbewahren, niemandem zeigen):', nip19.nsecEncode(sk));
+};
+$('#btn-nip07').onclick = async () => {
+  try { pk = await window.nostr.getPublicKey(); nip07 = true; sk = null; ls.set(LS_NIP07, '1'); zeigeIch(); }
+  catch { alert('Die Erweiterung hat den Zugriff abgelehnt.'); }
+};
+
+// --- Relays ----------------------------------------------------------------
+function zeigeRelays() {
+  const st = pool.listConnectionStatus();
+  $('#relays').innerHTML = '';
+  for (const url of RELAYS) {
+    const an = st.get(url) ?? st.get(url + '/');
+    const div = document.createElement('div'); div.className = 'relay';
+    div.innerHTML = `<span class="punkt ${an === true ? 'an' : an === false ? 'aus' : ''}"></span><span class="mono"></span>`;
+    div.lastChild.textContent = url.replace('wss://', '');
+    $('#relays').append(div);
+  }
+}
+setInterval(zeigeRelays, 1500);
+
+async function sende(vorlage) {
+  const ev = await signiere(vorlage);
+  verarbeite(ev); // sofort lokal anzeigen
+  const ergebnisse = await Promise.allSettled(pool.publish(RELAYS, ev));
+  const ok = ergebnisse.filter((r) => r.status === 'fulfilled').length;
+  $('#sende-info').textContent = ok
+    ? `Gesendet an ${ok} von ${RELAYS.length} Relays.`
+    : 'Kein Relay hat das Event angenommen – Verbindung prüfen.';
+  return ev;
+}
+
+// --- Events sammeln --------------------------------------------------------
+const events = new Map();           // id → event
+const partienIds = new Set();       // alle bekannten Partie-IDs
+const gueltigeId = (g) => typeof g === 'string' && /^[0-9a-f]{16}$/.test(g);
+const partieVon = (ev) => ev.tags.find((t) => t[0] === 'g')?.[1];
+
+function verarbeite(ev) {
+  if (events.has(ev.id) || ev.kind !== KIND) return;
+  const g = partieVon(ev); if (!gueltigeId(g)) return;
+  try { ev.c = JSON.parse(ev.content); } catch { return; }
+  if (!ev.c || typeof ev.c.t !== 'string') return;
+  events.set(ev.id, ev); partienIds.add(g);
+  planeNeuzeichnen();
+}
+
+let geplant = false;
+function planeNeuzeichnen() {
+  if (geplant) return; geplant = true;
+  requestAnimationFrame(() => { geplant = false; zeigeLobby(); if (aktuell) zeichne(); });
+}
+
+// Partie aus allen Events nachbauen und dabei jeden Zug prüfen
+function baue(g) {
+  const evs = [...events.values()].filter((e) => partieVon(e) === g)
+    .sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : 1));
+  const create = evs.find((e) => e.c.t === 'create' && (e.c.farbe === 'w' || e.c.farbe === 'b'));
+  if (!create) return null;
+  const join = evs.find((e) => e.c.t === 'join' && e.pubkey !== create.pubkey && e.created_at >= create.created_at);
+  const spieler = { w: null, b: null };
+  spieler[create.c.farbe] = create.pubkey;
+  if (join) spieler[create.c.farbe === 'w' ? 'b' : 'w'] = join.pubkey;
+
+  const chess = new Chess();
+  const zuege = [];
+  let ende = null;
+  if (spieler.w && spieler.b) {
+    const nachPly = new Map();
+    for (const e of evs) if (e.c.t === 'move' && Number.isInteger(e.c.ply)) {
+      if (!nachPly.has(e.c.ply)) nachPly.set(e.c.ply, []);
+      nachPly.get(e.c.ply).push(e);
+    }
+    for (let ply = 1; nachPly.has(ply) && !chess.isGameOver(); ply++) {
+      let angewandt = false;
+      for (const e of nachPly.get(ply)) {
+        if (e.pubkey !== spieler[chess.turn()]) continue;
+        try {
+          const z = chess.move({ from: e.c.from, to: e.c.to, promotion: e.c.promotion || 'q' });
+          zuege.push(z); angewandt = true; break;
+        } catch { /* ungültiger Zug – ignorieren */ }
+      }
+      if (!angewandt) break;
+    }
+    const aufgabe = evs.find((e) => e.c.t === 'resign' && (e.pubkey === spieler.w || e.pubkey === spieler.b));
+    if (aufgabe) ende = { art: 'aufgabe', verlierer: aufgabe.pubkey === spieler.w ? 'w' : 'b' };
+  }
+  if (!ende && chess.isCheckmate()) ende = { art: 'matt', verlierer: chess.turn() };
+  else if (!ende && chess.isDraw()) ende = { art: 'remis' };
+  return { g, create, spieler, chess, zuege, ende, letzte: evs.at(-1)?.created_at ?? create.created_at };
+}
+
+// --- Lobby -----------------------------------------------------------------
+function meine() { try { return JSON.parse(ls.get(LS_MEINE) || '[]'); } catch { return []; } }
+function merke(g) { const m = meine().filter((x) => x !== g); m.unshift(g); ls.set(LS_MEINE, JSON.stringify(m.slice(0, 30))); }
+
+function zeigeLobby() {
+  if (!pk) return;
+  const offen = [], mein = [];
+  for (const g of partienIds) {
+    const p = baue(g); if (!p) continue;
+    const beteiligt = p.spieler.w === pk || p.spieler.b === pk;
+    if (beteiligt) mein.push(p);
+    else if (!p.spieler.w || !p.spieler.b) offen.push(p);
+  }
+  for (const g of meine()) if (!partienIds.has(g)) mein.push({ g, nurId: true, letzte: 0 });
+  offen.sort((a, b) => b.letzte - a.letzte); mein.sort((a, b) => b.letzte - a.letzte);
+  liste('#offen', offen.slice(0, 15), 'Gerade keine offenen Partien – leg doch eine an.', (p) => {
+    const farbe = p.create.c.farbe === 'w' ? 'Schwarz' : 'Weiß';
+    return [`${kurz(p.create.pubkey)} sucht Gegner · du spielst ${farbe}`, 'Ansehen'];
+  });
+  liste('#meine', mein.slice(0, 15), 'Noch keine.', (p) => {
+    if (p.nurId) return [`Partie ${p.g} (lädt …)`, 'Öffnen'];
+    const status = p.ende ? 'beendet' : (!p.spieler.w || !p.spieler.b) ? 'wartet auf Gegner'
+      : (p.spieler[p.chess.turn()] === pk ? 'du bist am Zug' : 'Gegner am Zug');
+    return [`Partie ${p.g.slice(0, 6)} · ${p.zuege.length} Halbzüge · ${status}`, 'Öffnen'];
+  });
+}
+
+function liste(sel, eintraege, leer, text) {
+  const ul = $(sel); ul.innerHTML = '';
+  if (!eintraege.length) { ul.innerHTML = `<li class="muted"></li>`; ul.firstChild.textContent = leer; return; }
+  for (const p of eintraege) {
+    const [t, knopf] = text(p);
+    const li = document.createElement('li');
+    const span = document.createElement('span'); span.textContent = t; span.className = 'muted';
+    const b = document.createElement('button'); b.textContent = knopf; b.onclick = () => { location.hash = p.g; };
+    li.append(span, b); ul.append(li);
+  }
+}
+
+pool.subscribeMany(RELAYS, { kinds: [KIND], '#t': [TAG], since: jetzt() - 2 * 86400, limit: 500 },
+  { onevent: verarbeite });
+
+for (const btn of document.querySelectorAll('[data-farbe]')) {
+  btn.onclick = async () => {
+    let farbe = btn.dataset.farbe;
+    if (farbe === 'z') farbe = Math.random() < 0.5 ? 'w' : 'b';
+    const g = hex(crypto.getRandomValues(new Uint8Array(8)));
+    merke(g);
+    location.hash = g;
+    await sende({ tags: [['t', TAG], ['g', g]], content: JSON.stringify({ t: 'create', farbe }) });
+  };
+}
+
+// --- Partie ----------------------------------------------------------------
+let aktuell = null;        // Partie-ID
+let partieSub = null;
+let gewaehlt = null;
+
+function oeffne(g) {
+  partieSub?.close(); partieSub = null; gewaehlt = null;
+  aktuell = gueltigeId(g) ? g : null;
+  $('#lobby').classList.toggle('versteckt', !!aktuell);
+  $('#partie').classList.toggle('versteckt', !aktuell);
+  $('#zuege-karte').classList.toggle('versteckt', !aktuell);
+  $('#sende-info').textContent = '';
+  if (!aktuell) return zeigeLobby();
+  $('#partie-id').textContent = 'Partie ' + aktuell;
+  partieSub = pool.subscribeMany(RELAYS, { kinds: [KIND], '#g': [aktuell] }, { onevent: verarbeite });
+  zeichne();
+}
+window.addEventListener('hashchange', () => oeffne(location.hash.slice(1)));
+
+function zeichne() {
+  const p = baue(aktuell);
+  const brett = $('#brett');
+  if (!p) {
+    brett.innerHTML = ''; $('#status').textContent = 'Lade Partie von den Relays …';
+    $('#btn-beitreten').classList.add('versteckt'); $('#btn-aufgeben').disabled = true;
+    $('#gegner-oben').textContent = $('#gegner-unten').textContent = ''; $('#zuege').textContent = '';
+    return;
+  }
+  const meineFarbe = p.spieler.w === pk ? 'w' : p.spieler.b === pk ? 'b' : null;
+  const unten = meineFarbe || 'w';
+  const oben = unten === 'w' ? 'b' : 'w';
+  const name = (f) => (f === 'w' ? 'Weiß' : 'Schwarz') + ': ' +
+    (p.spieler[f] ? (p.spieler[f] === pk ? 'du' : kurz(p.spieler[f])) : 'offen');
+  $('#gegner-oben').textContent = name(oben);
+  $('#gegner-unten').textContent = name(unten);
+
+  const komplett = p.spieler.w && p.spieler.b;
+  const ichAmZug = komplett && !p.ende && p.spieler[p.chess.turn()] === pk;
+  $('#btn-beitreten').classList.toggle('versteckt', !!komplett || !!meineFarbe);
+  $('#btn-aufgeben').disabled = !meineFarbe || !komplett || !!p.ende;
+
+  // Status
+  let s;
+  if (p.ende?.art === 'matt') s = `Schachmatt – ${p.ende.verlierer === 'w' ? 'Schwarz' : 'Weiß'} gewinnt.`;
+  else if (p.ende?.art === 'aufgabe') s = `${p.ende.verlierer === 'w' ? 'Weiß' : 'Schwarz'} hat aufgegeben.`;
+  else if (p.ende?.art === 'remis') s = 'Remis.';
+  else if (!komplett) s = meineFarbe ? 'Warte auf einen Gegner – schick ihm den Link.' : 'Diese Partie sucht noch einen Gegner.';
+  else s = (ichAmZug ? 'Du bist am Zug' : meineFarbe ? 'Gegner ist am Zug' : (p.chess.turn() === 'w' ? 'Weiß' : 'Schwarz') + ' ist am Zug')
+    + (p.chess.inCheck() ? ' – Schach!' : '');
+  $('#status').textContent = s;
+
+  // Brett
+  const letzter = p.zuege.at(-1);
+  const ziele = gewaehlt && ichAmZug ? p.chess.moves({ square: gewaehlt, verbose: true }).map((m) => m.to) : [];
+  const dateien = 'abcdefgh';
+  const zeilen = unten === 'w' ? [8, 7, 6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6, 7, 8];
+  const spalten = unten === 'w' ? [...dateien] : [...dateien].reverse();
+  const figurName = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
+  brett.innerHTML = '';
+  zeilen.forEach((r, ri) => spalten.forEach((f, fi) => {
+    const feld = f + r;
+    const div = document.createElement('div');
+    const hell = (dateien.indexOf(f) + r) % 2 === 1;
+    div.className = 'feld ' + (hell ? 'h' : 'd');
+    if (letzter && (letzter.from === feld || letzter.to === feld)) div.classList.add('letzter');
+    if (gewaehlt === feld) div.classList.add('gewaehlt');
+    if (ziele.includes(feld)) div.classList.add('ziel');
+    const fig = p.chess.get(feld);
+    if (fig) {
+      if (fig.type === 'k' && p.chess.inCheck() && fig.color === p.chess.turn()) div.classList.add('schach');
+      const el = document.createElement('piece');
+      el.className = figurName[fig.type] + (fig.color === 'w' ? ' white' : ' black');
+      div.append(el);
+    }
+    if (fi === 0) div.insertAdjacentHTML('beforeend', `<span class="koord r">${r}</span>`);
+    if (ri === 7) div.insertAdjacentHTML('beforeend', `<span class="koord f">${f}</span>`);
+    div.onclick = () => klick(feld, p, ichAmZug);
+    brett.append(div);
+  }));
+
+  // Zugliste
+  let txt = '';
+  p.zuege.forEach((z, i) => { txt += (i % 2 === 0 ? `${i / 2 + 1}. ` : '') + z.san + ' '; });
+  $('#zuege').textContent = txt || 'Noch keine Züge.';
+}
+
+async function klick(feld, p, ichAmZug) {
+  if (!ichAmZug) return;
+  const fig = p.chess.get(feld);
+  if (gewaehlt) {
+    const zug = p.chess.moves({ square: gewaehlt, verbose: true }).find((m) => m.to === feld);
+    if (zug) {
+      const von = gewaehlt; gewaehlt = null;
+      await sende({
+        tags: [['t', TAG], ['g', aktuell]],
+        content: JSON.stringify({ t: 'move', ply: p.zuege.length + 1, from: von, to: feld,
+                                  promotion: zug.promotion ? 'q' : undefined, san: zug.san }),
+      });
+      return;
+    }
+  }
+  gewaehlt = fig && fig.color === p.chess.turn() && gewaehlt !== feld ? feld : null;
+  zeichne();
+}
+
+$('#btn-beitreten').onclick = async () => {
+  merke(aktuell);
+  await sende({ tags: [['t', TAG], ['g', aktuell]], content: JSON.stringify({ t: 'join' }) });
+};
+$('#btn-aufgeben').onclick = async () => {
+  if (!confirm('Wirklich aufgeben?')) return;
+  await sende({ tags: [['t', TAG], ['g', aktuell]], content: JSON.stringify({ t: 'resign' }) });
+};
+$('#btn-link').onclick = async () => {
+  const url = location.href;
+  try { await navigator.clipboard.writeText(url); $('#sende-info').textContent = 'Link kopiert.'; }
+  catch { prompt('Link zum Teilen:', url); }
+};
+$('#btn-lobby').onclick = () => { location.hash = ''; };
+
+// --- Start -----------------------------------------------------------------
+await identitaetLaden();
+zeigeRelays();
+oeffne(location.hash.slice(1));
+</script>
+</body>
+</html>
