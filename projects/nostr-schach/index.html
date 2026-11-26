@@ -68,6 +68,11 @@
   #status { text-align: center; font-weight: 600; margin: 12px 0 4px; min-height: 1.5em; }
   #zuege { max-height: 180px; overflow: auto; }
   .hinweis { padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: 13px; }
+  .hinweis.warn { border: 1px solid var(--warn); color: var(--warn); font-weight: 600; }
+  .online { color: var(--ok); } .offline, .fremd { color: var(--warn); }
+  #schiri-kopf { text-align: center; margin-top: 6px; }
+  #zuege .bestaetigt { color: var(--ok); }
+  #zuege .wartet { color: var(--muted); font-style: italic; }
   .versteckt { display: none !important; }
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 16px 16px; }
   input[type=text] { font: inherit; width: 100%; padding: 7px 9px; border-radius: 7px;
@@ -91,7 +96,16 @@
         <button class="primaer" data-farbe="b">Schwarz</button>
         <button class="primaer" data-farbe="z">Zufall</button>
       </div>
-      <p class="muted">Nach dem Anlegen bekommst du einen Link für deinen Gegner. Offene Partien
+      <div class="reihe" style="margin-top:8px">
+        <label><input type="checkbox" id="mit-schiri" checked> Schiri-Partie</label>
+        <span class="muted">Schiri <span id="schiri-standard" class="mono"></span></span>
+        <span id="schiri-standard-status" class="muted"></span>
+      </div>
+      <p id="schiri-hinweis" class="hinweis warn versteckt">Der Schiri ist gerade nicht online. Du kannst
+        die Partie trotzdem anlegen, sie beginnt aber erst mit seinem Start (ohne Start ist sie nach
+        10 Minuten annulliert).</p>
+      <p class="muted">Mit Schiri bestätigt der Schiri jeden Zug, die Uhr läuft nach seinen Zeiten, und
+        sein Ergebnis ist verbindlich. Nach dem Anlegen bekommst du einen Link für deinen Gegner. Offene Partien
         erscheinen auch unten für alle, die die Seite gerade geöffnet haben.</p>
       <h2>Offene Partien</h2>
       <ul id="offen" class="partien"><li class="muted">Suche auf den Relays …</li></ul>
@@ -106,12 +120,14 @@
         <span class="muted mono" id="partie-id"></span>
         <span id="uhr-oben" class="uhr"></span>
       </div>
+      <div id="schiri-kopf" class="muted"></div>
       <div id="brett" class="cg-wrap" style="margin-top:8px"></div>
       <div class="reihe" style="justify-content:space-between; margin-top:6px">
         <span id="gegner-unten" class="muted"></span>
         <span id="uhr-unten" class="uhr"></span>
       </div>
       <div id="status"></div>
+      <p id="abweichung" class="hinweis warn versteckt"></p>
       <div class="reihe" style="justify-content:center; margin-top:8px">
         <button id="btn-beitreten" class="primaer versteckt">Partie beitreten</button>
         <button id="btn-link">Link teilen</button>
@@ -150,14 +166,17 @@
 </main>
 
 <!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
-<footer>Nostr-Schach <span id="version">v0.1.8</span></footer>
+<footer>Nostr-Schach <span id="version">v0.1.9</span></footer>
 
 <script type="module">
-import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
-import { KIND, TAG, ZEITKONTROLLE, ABBRUCH_NACH, gueltigeId, partieVon, lies, baue as baueAus } from './regeln.js';
+import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19 } from 'nostr-tools';
+import { Chess } from 'chess.js';
+import { KIND, KIND_ACK, KIND_LEBENSZEICHEN, TAG, ZEITKONTROLLE, ABBRUCH_NACH, gueltigeId, partieVon, lies, baue as baueAus } from './regeln.js';
 
-// Protokoll und Regeln stehen in regeln.js, Relays und Import-Map in einstellungen.js.
-const { RELAYS } = window.EINSTELLUNGEN;
+// Protokoll und Regeln stehen in regeln.js, Relays, Import-Map und Standard-Schiri in einstellungen.js.
+const { RELAYS, SCHIRI } = window.EINSTELLUNGEN;
+const ONLINE_BIS = 180;     // s; so alt darf das letzte Lebenszeichen sein, damit der Schiri „online“ ist
+const ERNEUT_NACH = 10_000; // ms; eigener Zug ohne ack wird danach erneut gesendet (gleiches Event)
 const LS_SK = 'nostr-schach.sk';
 const LS_NIP07 = 'nostr-schach.nip07';
 const LS_MEINE = 'nostr-schach.meine';
@@ -240,6 +259,7 @@ setInterval(zeigeRelays, 1500);
 
 async function sende(vorlage) {
   const ev = await signiere(vorlage);
+  gesendetUm.set(ev.id, Date.now());
   verarbeite(ev); // sofort lokal anzeigen
   const ergebnisse = await Promise.allSettled(pool.publish(RELAYS, ev));
   const ok = ergebnisse.filter((r) => r.status === 'fulfilled').length;
@@ -248,6 +268,77 @@ async function sende(vorlage) {
     : 'Kein Relay hat das Event angenommen – Verbindung prüfen.';
   return ev;
 }
+
+// Schiri-Partie: Hat der eigene ausstehende Zug nach 10 s noch keinen ack, geht dasselbe Event
+// (gleiche ID) noch einmal an alle Relays, danach alle 10 s, solange die Partie läuft. Nie ein
+// neues Zug-Event für denselben ply.
+const gesendetUm = new Map(); // Event-ID → Zeitpunkt (ms) des letzten Sendens
+const roh = ({ id, pubkey, created_at, kind, tags, content, sig }) => ({ id, pubkey, created_at, kind, tags, content, sig });
+function erneutSenden(p) {
+  const z = p?.ausstehend;
+  if (!p?.schiri || !z || z.pubkey !== pk || p.ende) return;
+  const n = Date.now(), zuletzt = gesendetUm.get(z.id);
+  // Erst seit dem Laden bekannt (z. B. nach einem Neuladen): ab jetzt 10 s warten
+  if (zuletzt === undefined) return gesendetUm.set(z.id, n);
+  if (n - zuletzt < ERNEUT_NACH) return;
+  gesendetUm.set(z.id, n);
+  Promise.allSettled(pool.publish(RELAYS, roh(z))).then((r) => {
+    const ok = r.filter((x) => x.status === 'fulfilled').length;
+    $('#sende-info').textContent = `Noch keine Bestätigung: Zug ${z.c.ply} erneut an ${ok} von ${RELAYS.length} Relays gesendet.`;
+  });
+}
+
+// --- Schiri: Lebenszeichen (kind 14664) -------------------------------------
+const lebenszeichen = new Map(); // Pubkey des Schiris → created_at des neuesten Lebenszeichens
+let lzSub = null, lzAutoren = '';
+
+function abonniereLebenszeichen() {
+  const autoren = [SCHIRI];
+  const s = aktuell && baue(aktuell)?.schiri;
+  if (s && s !== SCHIRI) autoren.push(s);
+  lzAutoren = autoren.join();
+  lzSub?.close();
+  lzSub = pool.subscribeMany(RELAYS, { kinds: [KIND_LEBENSZEICHEN], authors: autoren }, {
+    onevent(ev) {
+      if (ev.kind !== KIND_LEBENSZEICHEN || !autoren.includes(ev.pubkey) || !verifyEvent(ev)) return;
+      if (ev.created_at > (lebenszeichen.get(ev.pubkey) ?? -1)) lebenszeichen.set(ev.pubkey, ev.created_at);
+      zeigeSchiriStatus();
+    },
+  });
+}
+
+const dauer = (s) => s < 3600 ? `${Math.max(1, Math.floor(s / 60))} min`
+  : s < 2 * 86400 ? `${Math.floor(s / 3600)} h` : `${Math.floor(s / 86400)} Tagen`;
+// „Schiri online“, wenn das letzte Lebenszeichen höchstens 3 Minuten alt ist
+function schiriStatus(s) {
+  const t = lebenszeichen.get(s);
+  if (t === undefined) return { online: false, text: 'Schiri: noch kein Lebenszeichen gesehen' };
+  const alt = jetzt() - t;
+  return alt <= ONLINE_BIS ? { online: true, text: 'Schiri online' } : { online: false, text: `Schiri zuletzt gesehen vor ${dauer(alt)}` };
+}
+
+// Status des Standard-Schiris in der Lobby und des Schiris der offenen Partie im Kopf
+function zeigeSchiriStatus() {
+  const st = schiriStatus(SCHIRI);
+  $('#schiri-standard').textContent = kurz(SCHIRI);
+  $('#schiri-standard-status').textContent = st.text;
+  $('#schiri-standard-status').className = st.online ? 'online' : 'offline';
+  $('#schiri-hinweis').classList.toggle('versteckt', st.online || !$('#mit-schiri').checked);
+  const kopf = $('#schiri-kopf');
+  const p = aktuell ? baue(aktuell) : null;
+  kopf.innerHTML = '';
+  if (!p) return;
+  if (!p.schiri) { kopf.textContent = 'Partie ohne Schiri (Uhr nach den Zeitstempeln der Spieler)'; return; }
+  const teil = (text, klasse) => { const el = document.createElement('span'); el.textContent = text; if (klasse) el.className = klasse; kopf.append(el); };
+  const sp = schiriStatus(p.schiri);
+  teil('Schiri-Partie · Schiri ');
+  teil(kurz(p.schiri), 'mono');
+  if (p.schiri !== SCHIRI) teil(' · nicht der Standard-Schiri', 'fremd');
+  teil(' · ');
+  teil(sp.text, sp.online ? 'online' : 'offline');
+}
+setInterval(zeigeSchiriStatus, 1000);
+$('#mit-schiri').onchange = zeigeSchiriStatus;
 
 // --- Events sammeln --------------------------------------------------------
 const events = new Map();           // id → event
@@ -286,15 +377,21 @@ function zeigeLobby() {
   offen.sort((a, b) => b.letzte - a.letzte); mein.sort((a, b) => b.letzte - a.letzte);
   liste('#offen', offen.slice(0, 15), 'Gerade keine offenen Partien – leg doch eine an.', (p) => {
     const farbe = p.create.c.farbe === 'w' ? 'Schwarz' : 'Weiß';
-    return [`${kurz(p.create.pubkey)} sucht Gegner · du spielst ${farbe}`, 'Ansehen'];
+    return [`${kurz(p.create.pubkey)} sucht Gegner · du spielst ${farbe} · ${schiriText(p)}`, 'Ansehen'];
   });
   liste('#meine', mein.slice(0, 15), 'Noch keine.', (p) => {
     if (p.nurId) return [`Partie ${p.g} (lädt …)`, 'Öffnen'];
     const status = p.ende ? 'beendet' : (!p.spieler.w || !p.spieler.b) ? 'wartet auf Gegner'
+      : p.schiri && !p.start ? 'wartet auf den Schiri'
+      : p.ausstehend ? 'Zug wartet auf Bestätigung'
       : (p.spieler[p.chess.turn()] === pk ? 'du bist am Zug' : 'Gegner am Zug');
-    return [`Partie ${p.g.slice(0, 6)} · ${p.zuege.length} Halbzüge · ${status}`, 'Öffnen'];
+    return [`Partie ${p.g.slice(0, 6)} · ${p.zuege.length} Halbzüge · ${status} · ${schiriText(p)}`, 'Öffnen'];
   });
 }
+
+// Für die Lobby: ob die Partie einen Schiri hat und welchen
+const schiriText = (p) => !p.schiri ? 'ohne Schiri'
+  : `Schiri ${kurz(p.schiri)}${p.schiri === SCHIRI ? '' : ' (nicht der Standard-Schiri)'}`;
 
 function liste(sel, eintraege, leer, text) {
   const ul = $(sel); ul.innerHTML = '';
@@ -321,9 +418,11 @@ for (const btn of document.querySelectorAll('[data-farbe]')) {
     let farbe = btn.dataset.farbe;
     if (farbe === 'z') farbe = Math.random() < 0.5 ? 'w' : 'b';
     const g = hex(crypto.getRandomValues(new Uint8Array(8)));
+    // Schiri-Partie: Standard-Schiri im schiri- und (für sein Abo über #p) im p-Tag
+    const schiri = $('#mit-schiri').checked ? [['schiri', SCHIRI], ['p', SCHIRI]] : [];
     merke(g);
     location.hash = g;
-    await sende({ tags: [['t', TAG], ['g', g], ['time_control', ZEITKONTROLLE]],
+    await sende({ tags: [['t', TAG], ['g', g], ['time_control', ZEITKONTROLLE], ...schiri],
                   content: JSON.stringify({ t: 'create', farbe }) });
   };
 }
@@ -340,20 +439,24 @@ function oeffne(g) {
   $('#partie').classList.toggle('versteckt', !aktuell);
   $('#zuege-karte').classList.toggle('versteckt', !aktuell);
   $('#sende-info').textContent = '';
-  if (!aktuell) return zeigeLobby();
+  if (!aktuell) { zeigeSchiriStatus(); return zeigeLobby(); }
   $('#partie-id').textContent = 'Partie ' + aktuell;
   abonnierePartie();
   zeichne();
 }
+// Mit kind 3410, damit die acks des Schiris ankommen (start und ergebnis sind kind 4664)
 function abonnierePartie() {
   partieSub?.close(); partieSub = null;
-  if (aktuell) partieSub = pool.subscribeMany(RELAYS, { kinds: [KIND], '#g': [aktuell] }, { onevent: verarbeite });
+  if (aktuell) partieSub = pool.subscribeMany(RELAYS, { kinds: [KIND, KIND_ACK], '#g': [aktuell] }, { onevent: verarbeite });
 }
 window.addEventListener('hashchange', () => oeffne(location.hash.slice(1)));
 
 // iOS trennt Verbindungen, wenn die Seite im Hintergrund ist (z. B. beim Wechsel zu iMessage).
 // Beim Zurückkommen und regelmäßig neu abonnieren; doppelte Events werden über die ID verworfen.
-function auffrischen() { if (document.visibilityState !== 'visible') return; abonniereLobby(); abonnierePartie(); }
+function auffrischen() {
+  if (document.visibilityState !== 'visible') return;
+  abonniereLobby(); abonnierePartie(); abonniereLebenszeichen();
+}
 document.addEventListener('visibilitychange', auffrischen);
 window.addEventListener('pageshow', auffrischen);
 window.addEventListener('online', auffrischen);
@@ -376,10 +479,12 @@ function zeigeUhren(p, unten) {
 // Jede Sekunde neu aus den Zeitstempeln rechnen. Das Brett wird nur neu gezeichnet, wenn sich
 // der Stand ändert (z. B. Zeitverlust), damit ein Klick nicht zwischen zwei Brettern landet.
 let gezeichnet = null; // Stand der letzten Zeichnung
-const stand = (p) => JSON.stringify(p && [p.ende, p.uhr.amZug, p.ids, p.spieler]);
+const stand = (p) => JSON.stringify(p && [p.ende, p.uhr.amZug, p.ids, p.spieler, p.start?.id, p.ausstehend?.id,
+  p.ergebnis?.id, p.abweichung]);
 setInterval(() => {
   if (!aktuell) return;
   const p = baue(aktuell);
+  erneutSenden(p);
   if (stand(p) !== gezeichnet) return zeichne();
   zeigeUhren(p, p?.spieler.b === pk && p?.spieler.w !== pk ? 'b' : 'w');
 }, 1000);
@@ -392,6 +497,7 @@ function zeichne() {
     brett.innerHTML = ''; $('#status').textContent = 'Lade Partie von den Relays …';
     $('#btn-beitreten').classList.add('versteckt'); $('#btn-aufgeben').disabled = true;
     $('#gegner-oben').textContent = $('#gegner-unten').textContent = ''; $('#zuege').textContent = '';
+    $('#abweichung').classList.add('versteckt');
     zeigeUhren(null);
     return;
   }
@@ -405,30 +511,46 @@ function zeichne() {
   zeigeUhren(p, unten);
 
   const komplett = p.spieler.w && p.spieler.b;
-  const ichAmZug = komplett && !p.ende && p.spieler[p.chess.turn()] === pk;
+  // In Schiri-Partien erst nach dem start, und nicht, solange ein Zug auf den ack wartet
+  const wartetAufStart = !!p.schiri && !p.start;
+  const ichAmZug = komplett && !p.ende && !wartetAufStart && !p.ausstehend && p.spieler[p.chess.turn()] === pk;
   $('#btn-beitreten').classList.toggle('versteckt', !!komplett || !!meineFarbe);
   $('#btn-aufgeben').disabled = !meineFarbe || !komplett || !!p.ende;
+  zeigeSchiriStatus();
+  if (p.schiri && !lzAutoren.split(',').includes(p.schiri)) abonniereLebenszeichen();
+
+  // Ein Zug, der auf den ack wartet, steht schon auf dem Brett (gezählt ist er noch nicht)
+  let brettStand = p.chess, offen = null;
+  if (p.ausstehend) {
+    const c = new Chess(p.chess.fen());
+    try { offen = c.move({ from: p.ausstehend.c.from, to: p.ausstehend.c.to, promotion: p.ausstehend.c.promotion || 'q' }); brettStand = c; }
+    catch { offen = null; }
+  }
 
   // Status
   let s;
-  if (p.ende?.art === 'matt') s = `Schachmatt – ${p.ende.verlierer === 'w' ? 'Schwarz' : 'Weiß'} gewinnt.`;
-  else if (p.ende?.art === 'aufgabe') s = `${p.ende.verlierer === 'w' ? 'Weiß' : 'Schwarz'} hat aufgegeben.`;
-  else if (p.ende?.art === 'doppelzug') s = p.ende.verlierer === 'w'
-    ? 'Weiß hat zwei verschiedene Züge gesendet – Schwarz gewinnt.'
-    : 'Schwarz hat zwei verschiedene Züge gesendet – Weiß gewinnt.';
-  else if (p.ende?.art === 'zeit') s = p.ende.verlierer === 'w'
-    ? 'Weiß hat die Zeit überschritten – Schwarz gewinnt.'
-    : 'Schwarz hat die Zeit überschritten – Weiß gewinnt.';
-  else if (p.ende?.art === 'abbruch') s = `Partie abgebrochen: kein erster Zug innerhalb von ${ABBRUCH_NACH} s.`;
-  else if (p.ende?.art === 'annulliert') s = 'Partie annulliert: Der Schiri hat nicht rechtzeitig bestätigt.';
-  else if (p.ende?.art === 'remis') s = 'Remis.';
+  if (p.ende) {
+    s = endeText(p.ende);
+    // In Schiri-Partien steht das Ende erst mit dem ergebnis des Schiris fest
+    if (p.ergebnis) s = `Ergebnis des Schiris (${GRUND[p.ende.art] ?? p.ende.art}): ${s}`;
+    else if (p.schiri) s += ' Warte auf das Ergebnis des Schiris …';
+  }
   else if (!komplett) s = meineFarbe ? 'Warte auf einen Gegner – schick ihm den Link.' : 'Diese Partie sucht noch einen Gegner.';
+  else if (wartetAufStart) s = 'Warte auf den Schiri …';
+  else if (p.ausstehend) s = p.ausstehend.pubkey === pk ? 'Dein Zug wartet auf Bestätigung des Schiris …'
+    : `Zug von ${p.chess.turn() === 'w' ? 'Weiß' : 'Schwarz'} wartet auf Bestätigung des Schiris …`;
   else s = (ichAmZug ? 'Du bist am Zug' : meineFarbe ? 'Gegner ist am Zug' : (p.chess.turn() === 'w' ? 'Weiß' : 'Schwarz') + ' ist am Zug')
     + (p.chess.inCheck() ? ' – Schach!' : '');
   $('#status').textContent = s;
 
+  // Weicht die eigene Auswertung vom ergebnis des Schiris ab, deutlich darauf hinweisen
+  const abw = $('#abweichung');
+  abw.classList.toggle('versteckt', !p.abweichung);
+  abw.textContent = p.abweichung ? `Achtung: Das Ergebnis des Schiris (${endeKurz(p.abweichung.schiri)}) weicht von der `
+    + `eigenen Auswertung ab (${p.abweichung.eigen ? endeKurz(p.abweichung.eigen) : 'Partie läuft noch'}). Es gilt das Ergebnis des Schiris.` : '';
+
   // Brett
-  const letzter = p.zuege.at(-1);
+  const letzter = offen ?? p.zuege.at(-1);
   const ziele = gewaehlt && ichAmZug ? p.chess.moves({ square: gewaehlt, verbose: true }).map((m) => m.to) : [];
   const dateien = 'abcdefgh';
   const zeilen = unten === 'w' ? [8, 7, 6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6, 7, 8];
@@ -443,9 +565,9 @@ function zeichne() {
     if (letzter && (letzter.from === feld || letzter.to === feld)) div.classList.add('letzter');
     if (gewaehlt === feld) div.classList.add('gewaehlt');
     if (ziele.includes(feld)) div.classList.add('ziel');
-    const fig = p.chess.get(feld);
+    const fig = brettStand.get(feld);
     if (fig) {
-      if (fig.type === 'k' && p.chess.inCheck() && fig.color === p.chess.turn()) div.classList.add('schach');
+      if (fig.type === 'k' && brettStand.inCheck() && fig.color === brettStand.turn()) div.classList.add('schach');
       const el = document.createElement('piece');
       el.className = figurName[fig.type] + (fig.color === 'w' ? ' white' : ' black');
       div.append(el);
@@ -456,16 +578,42 @@ function zeichne() {
     brett.append(div);
   }));
 
-  // Zugliste
-  let txt = '';
-  p.zuege.forEach((z, i) => { txt += (i % 2 === 0 ? `${i / 2 + 1}. ` : '') + z.san + ' '; });
-  $('#zuege').textContent = txt || 'Noch keine Züge.';
+  // Zugliste; in Schiri-Partien ist jeder gezählte Zug bestätigt (✓)
+  const zl = $('#zuege'); zl.innerHTML = '';
+  const eintrag = (i, san, klasse, zusatz, titel) => {
+    zl.append((i % 2 === 0 ? `${i / 2 + 1}. ` : '') + san);
+    if (zusatz) { const el = document.createElement('span'); el.className = klasse; el.textContent = zusatz; el.title = titel; zl.append(el); }
+    zl.append(' ');
+  };
+  p.zuege.forEach((z, i) => eintrag(i, z.san, 'bestaetigt', p.schiri ? ' ✓' : '', 'vom Schiri bestätigt'));
+  if (offen) eintrag(p.zuege.length, offen.san, 'wartet', ' (wartet auf Bestätigung)', 'Der Schiri hat diesen Zug noch nicht bestätigt');
+  if (!p.zuege.length && !offen) zl.textContent = 'Noch keine Züge.';
+}
+
+const FARBE = { w: 'Weiß', b: 'Schwarz' };
+// Grund eines Endes, wie ihn der Schiri meldet
+const GRUND = { matt: 'Matt', remis: 'Remis', aufgabe: 'Aufgabe', zeit: 'Zeit', abbruch: 'Abbruch',
+  doppelzug: 'Doppelzug', annulliert: 'annulliert' };
+const endeKurz = (e) => (GRUND[e.art] ?? e.art) + (e.verlierer ? `, ${FARBE[e.verlierer]} verliert` : '');
+function endeText(e) {
+  const gewinner = FARBE[e.verlierer === 'w' ? 'b' : 'w'], verlierer = FARBE[e.verlierer];
+  switch (e.art) {
+    case 'matt': return `Schachmatt – ${gewinner} gewinnt.`;
+    case 'aufgabe': return `${verlierer} hat aufgegeben.`;
+    case 'doppelzug': return `${verlierer} hat zwei verschiedene Züge gesendet – ${gewinner} gewinnt.`;
+    case 'zeit': return `${verlierer} hat die Zeit überschritten – ${gewinner} gewinnt.`;
+    case 'abbruch': return `Partie abgebrochen: kein erster Zug innerhalb von ${ABBRUCH_NACH} s.`;
+    case 'annulliert': return 'Partie annulliert: Der Schiri hat nicht rechtzeitig bestätigt.';
+    case 'remis': return 'Remis.';
+    default: return `Partie beendet (${e.art}).`;
+  }
 }
 
 async function klick(feld, p, ichAmZug) {
   if (!ichAmZug) return;
-  // Inzwischen vorbei (z. B. Zeit überschritten)? Dann nicht mehr ziehen.
-  if (baue(aktuell)?.ende) { gewaehlt = null; return zeichne(); }
+  // Inzwischen vorbei (z. B. Zeit überschritten) oder ein Zug wartet auf den ack? Dann nicht ziehen.
+  const neu = baue(aktuell);
+  if (neu?.ende || neu?.ausstehend || (neu?.schiri && !neu.start)) { gewaehlt = null; return zeichne(); }
   const fig = p.chess.get(feld);
   if (gewaehlt) {
     const zug = p.chess.moves({ square: gewaehlt, verbose: true }).find((m) => m.to === feld);
@@ -511,6 +659,8 @@ $('#btn-lobby').onclick = () => { location.hash = ''; };
 await identitaetLaden();
 zeigeRelays();
 oeffne(location.hash.slice(1));
+abonniereLebenszeichen();
+zeigeSchiriStatus();
 </script>
 </body>
 </html>
