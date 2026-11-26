@@ -140,23 +140,17 @@
   </aside>
 </main>
 
+<script type="importmap">
+{ "imports": {
+  "nostr-tools": "https://cdn.jsdelivr.net/npm/nostr-tools@2.25.5/+esm",
+  "chess.js": "https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm"
+} }
+</script>
 <script type="module">
-import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, nip19 }
-  from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.25.5/+esm';
-import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm';
+import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
+import { KIND, TAG, gueltigeId, partieVon, lies, baue as baueAus } from './regeln.js';
 
-// ---------------------------------------------------------------------------
-// Protokoll
-//   kind 6464 (regulär), Tags: ["t","nostr-schach"], ["g",<partie-id>]
-//   content (JSON):
-//     {"t":"create","farbe":"w"|"b"}            Ersteller und seine Farbe
-//     {"t":"join"}                              erster fremder Beitritt = Gegner
-//     {"t":"move","ply":n,"from":"e2","to":"e4","promotion":"q","san":"e4"}
-//     {"t":"resign"}
-//   Jeder Client baut die Partie aus allen Events selbst nach und prüft jeden Zug.
-// ---------------------------------------------------------------------------
-const KIND = 6464;
-const TAG = 'nostr-schach';
+// Protokoll und Regeln stehen in regeln.js.
 const RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
@@ -260,15 +254,10 @@ async function sende(vorlage) {
 // --- Events sammeln --------------------------------------------------------
 const events = new Map();           // id → event
 const partienIds = new Set();       // alle bekannten Partie-IDs
-const gueltigeId = (g) => typeof g === 'string' && /^[0-9a-f]{16}$/.test(g);
-const partieVon = (ev) => ev.tags.find((t) => t[0] === 'g')?.[1];
 
 function verarbeite(ev) {
-  if (events.has(ev.id) || ev.kind !== KIND) return;
-  const g = partieVon(ev); if (!gueltigeId(g)) return;
-  try { ev.c = JSON.parse(ev.content); } catch { return; }
-  if (!ev.c || typeof ev.c.t !== 'string') return;
-  events.set(ev.id, ev); partienIds.add(g);
+  if (events.has(ev.id) || !lies(ev)) return;
+  events.set(ev.id, ev); partienIds.add(partieVon(ev));
   planeNeuzeichnen();
 }
 
@@ -278,44 +267,8 @@ function planeNeuzeichnen() {
   requestAnimationFrame(() => { geplant = false; zeigeLobby(); if (aktuell) zeichne(); });
 }
 
-// Partie aus allen Events nachbauen und dabei jeden Zug prüfen
-function baue(g) {
-  const evs = [...events.values()].filter((e) => partieVon(e) === g)
-    .sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : 1));
-  const create = evs.find((e) => e.c.t === 'create' && (e.c.farbe === 'w' || e.c.farbe === 'b'));
-  if (!create) return null;
-  const join = evs.find((e) => e.c.t === 'join' && e.pubkey !== create.pubkey && e.created_at >= create.created_at);
-  const spieler = { w: null, b: null };
-  spieler[create.c.farbe] = create.pubkey;
-  if (join) spieler[create.c.farbe === 'w' ? 'b' : 'w'] = join.pubkey;
-
-  const chess = new Chess();
-  const zuege = [];
-  let ende = null;
-  if (spieler.w && spieler.b) {
-    const nachPly = new Map();
-    for (const e of evs) if (e.c.t === 'move' && Number.isInteger(e.c.ply)) {
-      if (!nachPly.has(e.c.ply)) nachPly.set(e.c.ply, []);
-      nachPly.get(e.c.ply).push(e);
-    }
-    for (let ply = 1; nachPly.has(ply) && !chess.isGameOver(); ply++) {
-      let angewandt = false;
-      for (const e of nachPly.get(ply)) {
-        if (e.pubkey !== spieler[chess.turn()]) continue;
-        try {
-          const z = chess.move({ from: e.c.from, to: e.c.to, promotion: e.c.promotion || 'q' });
-          zuege.push(z); angewandt = true; break;
-        } catch { /* ungültiger Zug – ignorieren */ }
-      }
-      if (!angewandt) break;
-    }
-    const aufgabe = evs.find((e) => e.c.t === 'resign' && (e.pubkey === spieler.w || e.pubkey === spieler.b));
-    if (aufgabe) ende = { art: 'aufgabe', verlierer: aufgabe.pubkey === spieler.w ? 'w' : 'b' };
-  }
-  if (!ende && chess.isCheckmate()) ende = { art: 'matt', verlierer: chess.turn() };
-  else if (!ende && chess.isDraw()) ende = { art: 'remis' };
-  return { g, create, spieler, chess, zuege, ende, letzte: evs.at(-1)?.created_at ?? create.created_at };
-}
+// Partie aus allen Events nachbauen und dabei jeden Zug prüfen (Regeln in regeln.js)
+const baue = (g) => baueAus([...events.values()].filter((e) => partieVon(e) === g));
 
 // --- Lobby -----------------------------------------------------------------
 function meine() { try { return JSON.parse(ls.get(LS_MEINE) || '[]'); } catch { return []; } }
@@ -432,6 +385,9 @@ function zeichne() {
   let s;
   if (p.ende?.art === 'matt') s = `Schachmatt – ${p.ende.verlierer === 'w' ? 'Schwarz' : 'Weiß'} gewinnt.`;
   else if (p.ende?.art === 'aufgabe') s = `${p.ende.verlierer === 'w' ? 'Weiß' : 'Schwarz'} hat aufgegeben.`;
+  else if (p.ende?.art === 'doppelzug') s = p.ende.verlierer === 'w'
+    ? 'Weiß hat zwei verschiedene Züge gesendet – Schwarz gewinnt.'
+    : 'Schwarz hat zwei verschiedene Züge gesendet – Weiß gewinnt.';
   else if (p.ende?.art === 'remis') s = 'Remis.';
   else if (!komplett) s = meineFarbe ? 'Warte auf einen Gegner – schick ihm den Link.' : 'Diese Partie sucht noch einen Gegner.';
   else s = (ichAmZug ? 'Du bist am Zug' : meineFarbe ? 'Gegner ist am Zug' : (p.chess.turn() === 'w' ? 'Weiß' : 'Schwarz') + ' ist am Zug')
