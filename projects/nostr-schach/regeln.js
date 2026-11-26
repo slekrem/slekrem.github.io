@@ -4,8 +4,9 @@
 // Schiri-Seite laden es im Browser (Import-Map in der HTML-Datei), die Tests laden es in Node.
 // Beide müssen zu jedem Satz Events exakt dasselbe Ergebnis liefern.
 //
-// Protokoll (v1)
-//   kind 6464 (regulär), Tags: ["t","nostr-schach"], ["g",<partie-id>]
+// Protokoll (v2), Spezifikation in docs/protokoll.md
+//   kind 4664 (regulär), Tags: ["t","nostr-schach"], ["g",<partie-id>]
+//   Events mit dem alten kind 6464 (v1) werden nicht mehr gelesen.
 //   content (JSON):
 //     {"t":"create","farbe":"w"|"b"}            Ersteller und seine Farbe
 //     {"t":"join"}                              erster fremder Beitritt = Gegner
@@ -15,7 +16,7 @@
 import { verifyEvent } from 'nostr-tools';
 import { Chess } from 'chess.js';
 
-export const KIND = 6464;
+export const KIND = 4664;
 export const TAG = 'nostr-schach';
 
 export const gueltigeId = (g) => typeof g === 'string' && /^[0-9a-f]{16}$/.test(g);
