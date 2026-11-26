@@ -59,6 +59,10 @@
                    background-size: contain; background-repeat: no-repeat; background-position: center; }
   .koord { position: absolute; font-size: 10px; opacity: .7; z-index: 1; color: #000; }
   .koord.r { left: 3px; top: 2px; } .koord.f { right: 3px; bottom: 1px; }
+  .uhr { font: 600 18px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 3px 10px;
+         border-radius: 7px; border: 1px solid var(--line); background: var(--bg); min-width: 4.5em; text-align: center; }
+  .uhr.laeuft { background: var(--akzent); border-color: var(--akzent); color: #fff; }
+  .uhr.laeuft.knapp { background: var(--warn); border-color: var(--warn); }
   #status { text-align: center; font-weight: 600; margin: 12px 0 4px; min-height: 1.5em; }
   #zuege { max-height: 180px; overflow: auto; }
   .hinweis { padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: 13px; }
@@ -98,10 +102,12 @@
       <div class="reihe" style="justify-content:space-between">
         <span id="gegner-oben" class="muted"></span>
         <span class="muted mono" id="partie-id"></span>
+        <span id="uhr-oben" class="uhr"></span>
       </div>
       <div id="brett" class="cg-wrap" style="margin-top:8px"></div>
       <div class="reihe" style="justify-content:space-between; margin-top:6px">
         <span id="gegner-unten" class="muted"></span>
+        <span id="uhr-unten" class="uhr"></span>
       </div>
       <div id="status"></div>
       <div class="reihe" style="justify-content:center; margin-top:8px">
@@ -142,7 +148,7 @@
 </main>
 
 <!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
-<footer>Nostr-Schach <span id="version">v0.1.4</span></footer>
+<footer>Nostr-Schach <span id="version">v0.1.5</span></footer>
 
 <script type="importmap">
 { "imports": {
@@ -152,7 +158,7 @@
 </script>
 <script type="module">
 import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
-import { KIND, TAG, gueltigeId, partieVon, lies, baue as baueAus } from './regeln.js';
+import { KIND, TAG, ZEITKONTROLLE, ABBRUCH_NACH, gueltigeId, partieVon, lies, baue as baueAus } from './regeln.js';
 
 // Protokoll und Regeln stehen in regeln.js.
 const RELAYS = [
@@ -271,8 +277,9 @@ function planeNeuzeichnen() {
   requestAnimationFrame(() => { geplant = false; zeigeLobby(); if (aktuell) zeichne(); });
 }
 
-// Partie aus allen Events nachbauen und dabei jeden Zug prüfen (Regeln in regeln.js)
-const baue = (g) => baueAus([...events.values()].filter((e) => partieVon(e) === g));
+// Partie aus allen Events nachbauen und dabei jeden Zug prüfen (Regeln in regeln.js). Die Uhr
+// rechnet baue() aus den Zeitstempeln der Events und der aktuellen Zeit.
+const baue = (g) => baueAus([...events.values()].filter((e) => partieVon(e) === g), jetzt());
 
 // --- Lobby -----------------------------------------------------------------
 function meine() { try { return JSON.parse(ls.get(LS_MEINE) || '[]'); } catch { return []; } }
@@ -328,7 +335,8 @@ for (const btn of document.querySelectorAll('[data-farbe]')) {
     const g = hex(crypto.getRandomValues(new Uint8Array(8)));
     merke(g);
     location.hash = g;
-    await sende({ tags: [['t', TAG], ['g', g]], content: JSON.stringify({ t: 'create', farbe }) });
+    await sende({ tags: [['t', TAG], ['g', g], ['time_control', ZEITKONTROLLE]],
+                  content: JSON.stringify({ t: 'create', farbe }) });
   };
 }
 
@@ -363,13 +371,40 @@ window.addEventListener('pageshow', auffrischen);
 window.addEventListener('online', auffrischen);
 setInterval(() => { if (aktuell && document.visibilityState === 'visible') abonnierePartie(); }, 20000);
 
+// Uhren aus dem Ergebnis von baue() anzeigen (m:ss); die Uhr des Spielers am Zug läuft sichtbar.
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+function zeigeUhren(p, unten) {
+  for (const [sel, f] of [['#uhr-unten', unten], ['#uhr-oben', unten === 'w' ? 'b' : 'w']]) {
+    const el = $(sel);
+    el.textContent = p ? mmss(p.uhr[f]) : '';
+    el.classList.toggle('versteckt', !p);
+    el.classList.toggle('laeuft', !!p && p.uhr.amZug === f);
+    el.classList.toggle('knapp', !!p && p.uhr[f] <= 30);
+    el.title = p ? (f === 'w' ? 'Uhr von Weiß' : 'Uhr von Schwarz') : '';
+    el.dataset.farbe = f;
+  }
+}
+
+// Jede Sekunde neu aus den Zeitstempeln rechnen. Das Brett wird nur neu gezeichnet, wenn sich
+// der Stand ändert (z. B. Zeitverlust), damit ein Klick nicht zwischen zwei Brettern landet.
+let gezeichnet = null; // Stand der letzten Zeichnung
+const stand = (p) => JSON.stringify(p && [p.ende, p.uhr.amZug, p.ids, p.spieler]);
+setInterval(() => {
+  if (!aktuell) return;
+  const p = baue(aktuell);
+  if (stand(p) !== gezeichnet) return zeichne();
+  zeigeUhren(p, p?.spieler.b === pk && p?.spieler.w !== pk ? 'b' : 'w');
+}, 1000);
+
 function zeichne() {
   const p = baue(aktuell);
+  gezeichnet = stand(p);
   const brett = $('#brett');
   if (!p) {
     brett.innerHTML = ''; $('#status').textContent = 'Lade Partie von den Relays …';
     $('#btn-beitreten').classList.add('versteckt'); $('#btn-aufgeben').disabled = true;
     $('#gegner-oben').textContent = $('#gegner-unten').textContent = ''; $('#zuege').textContent = '';
+    zeigeUhren(null);
     return;
   }
   const meineFarbe = p.spieler.w === pk ? 'w' : p.spieler.b === pk ? 'b' : null;
@@ -379,6 +414,7 @@ function zeichne() {
     (p.spieler[f] ? (p.spieler[f] === pk ? 'du' : kurz(p.spieler[f])) : 'offen');
   $('#gegner-oben').textContent = name(oben);
   $('#gegner-unten').textContent = name(unten);
+  zeigeUhren(p, unten);
 
   const komplett = p.spieler.w && p.spieler.b;
   const ichAmZug = komplett && !p.ende && p.spieler[p.chess.turn()] === pk;
@@ -392,6 +428,10 @@ function zeichne() {
   else if (p.ende?.art === 'doppelzug') s = p.ende.verlierer === 'w'
     ? 'Weiß hat zwei verschiedene Züge gesendet – Schwarz gewinnt.'
     : 'Schwarz hat zwei verschiedene Züge gesendet – Weiß gewinnt.';
+  else if (p.ende?.art === 'zeit') s = p.ende.verlierer === 'w'
+    ? 'Weiß hat die Zeit überschritten – Schwarz gewinnt.'
+    : 'Schwarz hat die Zeit überschritten – Weiß gewinnt.';
+  else if (p.ende?.art === 'abbruch') s = `Partie abgebrochen: kein erster Zug innerhalb von ${ABBRUCH_NACH} s.`;
   else if (p.ende?.art === 'remis') s = 'Remis.';
   else if (!komplett) s = meineFarbe ? 'Warte auf einen Gegner – schick ihm den Link.' : 'Diese Partie sucht noch einen Gegner.';
   else s = (ichAmZug ? 'Du bist am Zug' : meineFarbe ? 'Gegner ist am Zug' : (p.chess.turn() === 'w' ? 'Weiß' : 'Schwarz') + ' ist am Zug')
@@ -435,6 +475,8 @@ function zeichne() {
 
 async function klick(feld, p, ichAmZug) {
   if (!ichAmZug) return;
+  // Inzwischen vorbei (z. B. Zeit überschritten)? Dann nicht mehr ziehen.
+  if (baue(aktuell)?.ende) { gewaehlt = null; return zeichne(); }
   const fig = p.chess.get(feld);
   if (gewaehlt) {
     const zug = p.chess.moves({ square: gewaehlt, verbose: true }).find((m) => m.to === feld);
@@ -462,6 +504,7 @@ $('#btn-beitreten').onclick = async () => {
 };
 $('#btn-aufgeben').onclick = async () => {
   if (!confirm('Wirklich aufgeben?')) return;
+  if (baue(aktuell)?.ende) return zeichne(); // inzwischen vorbei
   await sende({ tags: [['t', TAG], ['g', aktuell]], content: JSON.stringify({ t: 'resign' }) });
 };
 $('#btn-link').onclick = async () => {
