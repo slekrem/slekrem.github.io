@@ -63,6 +63,7 @@
   #zuege { max-height: 180px; overflow: auto; }
   .hinweis { padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: 13px; }
   .versteckt { display: none !important; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 16px 16px; }
   input[type=text] { font: inherit; width: 100%; padding: 7px 9px; border-radius: 7px;
                      border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
 </style>
@@ -139,6 +140,9 @@
     </div>
   </aside>
 </main>
+
+<!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
+<footer>Nostr-Schach <span id="version">v0.1.1</span></footer>
 
 <script type="importmap">
 { "imports": {
