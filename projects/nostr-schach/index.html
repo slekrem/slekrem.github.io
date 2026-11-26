@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nostr-Schach</title>
 <meta name="description" content="Einfaches Schach über Nostr – dezentral, direkt im Browser.">
+<!-- Relays und Import-Map (gemeinsam mit schiri.html), muss vor jedem Modul-Skript stehen -->
+<script src="einstellungen.js"></script>
 <!-- Figuren: cburnett-SVGs aus chessground (eingebettet als data-URIs) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9.2.1/assets/chessground.cburnett.css">
 <style>
@@ -148,28 +150,14 @@
 </main>
 
 <!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
-<footer>Nostr-Schach <span id="version">v0.1.5</span></footer>
+<footer>Nostr-Schach <span id="version">v0.1.8</span></footer>
 
-<script type="importmap">
-{ "imports": {
-  "nostr-tools": "https://cdn.jsdelivr.net/npm/nostr-tools@2.25.5/+esm",
-  "chess.js": "https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm"
-} }
-</script>
 <script type="module">
 import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
 import { KIND, TAG, ZEITKONTROLLE, ABBRUCH_NACH, gueltigeId, partieVon, lies, baue as baueAus } from './regeln.js';
 
-// Protokoll und Regeln stehen in regeln.js.
-const RELAYS = [
-  'wss://relay.damus.io',
-  'wss://nos.lol',
-  'wss://relay.primal.net',
-  'wss://relay.snort.social',
-  'wss://offchain.pub',
-  'wss://relay.nostr.net',
-  'wss://nostr.mom',
-];
+// Protokoll und Regeln stehen in regeln.js, Relays und Import-Map in einstellungen.js.
+const { RELAYS } = window.EINSTELLUNGEN;
 const LS_SK = 'nostr-schach.sk';
 const LS_NIP07 = 'nostr-schach.nip07';
 const LS_MEINE = 'nostr-schach.meine';
@@ -432,6 +420,7 @@ function zeichne() {
     ? 'Weiß hat die Zeit überschritten – Schwarz gewinnt.'
     : 'Schwarz hat die Zeit überschritten – Weiß gewinnt.';
   else if (p.ende?.art === 'abbruch') s = `Partie abgebrochen: kein erster Zug innerhalb von ${ABBRUCH_NACH} s.`;
+  else if (p.ende?.art === 'annulliert') s = 'Partie annulliert: Der Schiri hat nicht rechtzeitig bestätigt.';
   else if (p.ende?.art === 'remis') s = 'Remis.';
   else if (!komplett) s = meineFarbe ? 'Warte auf einen Gegner – schick ihm den Link.' : 'Diese Partie sucht noch einen Gegner.';
   else s = (ichAmZug ? 'Du bist am Zug' : meineFarbe ? 'Gegner ist am Zug' : (p.chess.turn() === 'w' ? 'Weiß' : 'Schwarz') + ' ist am Zug')
