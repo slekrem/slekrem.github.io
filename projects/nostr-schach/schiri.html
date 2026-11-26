@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nostr-Schach · Schiri</title>
+<meta name="description" content="Schiri für Nostr-Schach: bestätigt Züge und stellt das Ergebnis fest.">
+<!-- Relays und Import-Map (gemeinsam mit index.html), muss vor jedem Modul-Skript stehen -->
+<script src="einstellungen.js"></script>
+<style>
+  /* Farben und Grundformen wie in index.html */
+  :root {
+    --bg: #f4f1ea; --fg: #1d1d1b; --muted: #6b6860; --card: #ffffff; --line: #ddd8cc;
+    --akzent: #7b4fd6; --ok: #2e8b57; --warn: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17161a; --fg: #ece9e1; --muted: #9a968c; --card: #222126; --line: #35333a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex;
+           align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; }
+  header h1 a { color: inherit; text-decoration: none; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .sub a { color: inherit; }
+  #kopf-status { margin-left: auto; display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+  #kopf-status .ok { color: var(--ok); }
+  #kopf-status .warn { color: var(--warn); }
+  #offen-lassen { margin: 0; padding: 10px 16px; background: var(--akzent); color: #fff;
+                  font-weight: 600; text-align: center; }
+  #offen-lassen.hinten, #kein-relay { background: var(--warn); }
+  #kein-relay { margin: 0; padding: 10px 16px; color: #fff; font-weight: 600; text-align: center; }
+  main { max-width: 1260px; margin: 0 auto; padding: 16px; display: grid; gap: 16px;
+         grid-template-columns: minmax(0, 1fr) 320px; }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+  section, aside { display: grid; gap: 16px; align-content: start; }
+  .karte { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .karte h2 { margin: 0 0 10px; font-size: 15px; }
+  button { font: inherit; padding: 7px 12px; border-radius: 7px; border: 1px solid var(--line);
+           background: var(--bg); color: var(--fg); cursor: pointer; }
+  button.primaer { background: var(--akzent); border-color: var(--akzent); color: #fff; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .reihe { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .relay { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .punkt { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .punkt.an { background: var(--ok); }
+  .punkt.aus { background: var(--warn); }
+  .versteckt { display: none !important; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 16px 16px; }
+  #npub { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: var(--bg); margin-bottom: 8px; }
+  #nsec { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--warn); margin-top: 8px; }
+  .tabelle { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  td.uhr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  td.uhr.laeuft { color: var(--akzent); font-weight: 700; }
+  td.zahl { text-align: right; }
+  td.id { word-break: normal; white-space: nowrap; }
+  #protokoll { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; font-size: 13px; }
+  #protokoll li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="#">Nostr-Schach · Schiri</a></h1>
+  <span class="sub">Bestätigt Züge und stellt das Ergebnis fest · <a href="./">zur Spieler-Seite</a></span>
+  <span id="kopf-status">
+    <span id="wach" class="warn">Wake Lock wird angefragt …</span>
+    <span id="lebenszeichen">Lebenszeichen: noch keins</span>
+    <span id="speicher"></span>
+  </span>
+</header>
+<p id="offen-lassen">Dieser Tab ist der Schiri. Offen lassen.</p>
+<p id="kein-relay" class="versteckt">Kein Relay antwortet (kein EOSE). Der Schiri handelt nicht, bis
+  mindestens ein Relay geantwortet hat.</p>
+
+<main>
+  <section>
+    <div class="karte">
+      <h2>Laufende Partien</h2>
+      <div class="tabelle"><table id="laufend"></table></div>
+    </div>
+    <div class="karte">
+      <h2>Beendete Partien</h2>
+      <div class="tabelle"><table id="beendet"></table></div>
+    </div>
+    <div class="karte">
+      <h2>Gesendete Events und Hinweise</h2>
+      <ol id="protokoll"><li class="muted">Noch nichts gesendet.</li></ol>
+    </div>
+  </section>
+
+  <aside>
+    <div class="karte">
+      <h2>Schiri-Schlüssel</h2>
+      <div id="npub" class="mono"></div>
+      <div class="reihe">
+        <button id="btn-kopieren" class="primaer">npub kopieren</button>
+        <button id="btn-nsec">nsec anzeigen</button>
+        <button id="btn-backup">Backup herunterladen</button>
+      </div>
+      <div id="nsec" class="mono versteckt"></div>
+      <div class="reihe" style="margin-top:8px">
+        <button id="btn-neu">Neuer Schlüssel</button>
+        <button id="btn-import">nsec importieren</button>
+      </div>
+      <p id="neu-hinweis" class="muted versteckt">„Neuer Schlüssel“ und „nsec importieren“ gehen erst,
+        wenn in dieser Sitzung das Backup des jetzigen Schlüssels heruntergeladen wurde.</p>
+      <p id="schluessel-info" class="muted"></p>
+      <p class="muted">Der Schlüssel liegt nur in diesem Browser (localStorage), getrennt vom
+        Spieler-Schlüssel. Ein Backup sichert ihn; geht er verloren, kann dieser Schiri keine
+        Partien mehr bestätigen. Die eigenen gesendeten Events stehen zusätzlich in IndexedDB.</p>
+    </div>
+
+    <div class="karte">
+      <h2>Relays</h2>
+      <div id="relays" style="display:grid; gap:4px"></div>
+    </div>
+  </aside>
+</main>
+
+<!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
+<footer>Nostr-Schach <span id="version">v0.1.8</span></footer>
+
+<script type="module">
+import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
+import { KIND, KIND_ACK, KIND_LEBENSZEICHEN, TAG, partieVon, lies, baue } from './regeln.js';
+
+// Protokoll und Regeln stehen in regeln.js (docs/protokoll.md), Relays in einstellungen.js.
+const { RELAYS } = window.EINSTELLUNGEN;
+const LS_SK = 'nostr-schach.schiri.sk'; // getrennt vom Spieler-Schlüssel (nostr-schach.sk)
+const ZURUECK = 2 * 86400;              // Partien der letzten zwei Tage
+const EOSE_FRIST = 5000;                // ms; ohne EOSE danach gilt ein Relay als „antwortet nicht“
+const NEU_ABONNIEREN = 5 * 60_000;      // ms; Abos regelmäßig neu aufsetzen
+const LEBENSZEICHEN_ALLE = 60_000;      // ms
+const AUSSETZER = 5000;                 // ms zwischen zwei Takten, ab denen das Protokoll es vermerkt
+const EOSE_NIE = 2 ** 31 - 1;           // „kein Zeitlimit“ für EOSE (nostr-tools meldet sonst nach 4,4 s EOSE)
+// Enden, die der Schiri mit einem `ergebnis` feststellt. Auch die Annullierung (ANNULLIERT_NACH),
+// etwa wenn er nach einem Ausfall wiederkommt: Dann steht sie verbindlich auf den Relays.
+const MELDEN = ['matt', 'remis', 'aufgabe', 'zeit', 'abbruch', 'doppelzug', 'annulliert'];
+
+const $ = (s) => document.querySelector(s);
+const pool = new SimplePool({ enableReconnect: true });
+const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+const unhex = (h) => Uint8Array.from(h.match(/../g).map((x) => parseInt(x, 16)));
+const kurz = (pk) => { const n = nip19.npubEncode(pk); return n.slice(0, 12) + '…' + n.slice(-6); };
+const jetzt = () => Math.floor(Date.now() / 1000);
+const uhrzeit = (d = new Date()) => d.toLocaleTimeString('de-DE');
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+// --- Schlüssel ---------------------------------------------------------------
+let sk = null, pk = null;
+// Gab es den Schlüssel schon vor dieser Sitzung (oder wurde er gesetzt)? Nur ein beim Laden frisch
+// erzeugter Schlüssel ist es nicht. Für einen vorhandenen Schlüssel ist „Neuer Schlüssel“ erst
+// klickbar, wenn in dieser Sitzung sein Backup heruntergeladen wurde (`backupVon` = sein Pubkey).
+let vorhanden = false, backupVon = null;
+
+function schluesselLaden() {
+  const gespeichert = ls.get(LS_SK);
+  vorhanden = !!gespeichert && /^[0-9a-f]{64}$/.test(gespeichert);
+  const s = vorhanden ? unhex(gespeichert) : generateSecretKey();
+  ls.set(LS_SK, hex(s));
+  sk = s; pk = getPublicKey(sk);
+}
+
+function setzeSchluessel(neu) {
+  ls.set(LS_SK, hex(neu));
+  sk = neu; pk = getPublicKey(sk);
+  vorhanden = true;
+  zeigeSchluessel();
+  neuBeginnen();
+}
+
+// Rückfrage, bevor ein vorhandener Schlüssel ersetzt wird (mit der Zahl laufender Partien)
+function ersetzenBestaetigt(was) {
+  const n = meinePartien().filter((x) => !x.p.ende).length;
+  const laufen = n === 0 ? '' : n === 1 ? '\n\nGerade läuft 1 Partie mit diesem Schiri.' : `\n\nGerade laufen ${n} Partien mit diesem Schiri.`;
+  return confirm(`Der bisherige Schiri-Schlüssel wird ersetzt. Laufende Partien, die ihn als Schiri nennen, werden dann nicht mehr bestätigt.${laufen}\n\nWirklich ${was}?`);
+}
+
+function zeigeSchluessel() {
+  $('#npub').textContent = nip19.npubEncode(pk);
+  $('#nsec').classList.add('versteckt'); $('#nsec').textContent = '';
+  $('#btn-nsec').textContent = 'nsec anzeigen';
+  $('#schluessel-info').textContent = '';
+  zeigeNeuKnopf();
+}
+
+function zeigeNeuKnopf() {
+  const gesperrt = vorhanden && backupVon !== pk;
+  for (const knopf of ['#btn-neu', '#btn-import']) {
+    $(knopf).disabled = gesperrt;
+    $(knopf).title = gesperrt ? 'Erst das Backup herunterladen' : '';
+  }
+  $('#neu-hinweis').classList.toggle('versteckt', !gesperrt);
+}
+
+$('#btn-kopieren').onclick = async () => {
+  const npub = nip19.npubEncode(pk);
+  try { await navigator.clipboard.writeText(npub); $('#schluessel-info').textContent = 'npub kopiert.'; }
+  catch { prompt('npub des Schiris:', npub); }
+};
+$('#btn-nsec').onclick = () => {
+  const zu = $('#nsec').classList.toggle('versteckt');
+  $('#nsec').textContent = zu ? '' : nip19.nsecEncode(sk);
+  $('#btn-nsec').textContent = zu ? 'nsec anzeigen' : 'nsec verbergen';
+};
+$('#btn-backup').onclick = () => {
+  const npub = nip19.npubEncode(pk);
+  const text = `Nostr-Schach – Schiri-Schlüssel (geheim halten)\n\nnpub: ${npub}\nnsec: ${nip19.nsecEncode(sk)}\n`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  a.download = `nostr-schach-schiri-${npub.slice(5, 13)}.txt`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  backupVon = pk;
+  zeigeNeuKnopf();
+  $('#schluessel-info').textContent = `Backup ${a.download} heruntergeladen.`;
+};
+$('#btn-neu').onclick = () => {
+  if (!vorhanden) {
+    if (!confirm('Neuen Schiri-Schlüssel erzeugen? Der bisherige geht verloren, wenn du kein Backup hast. Partien, die ihn nennen, bestätigt dieser Tab dann nicht mehr.')) return;
+    return setzeSchluessel(generateSecretKey());
+  }
+  if (backupVon !== pk) return; // Knopf ist ohnehin gesperrt
+  if (!ersetzenBestaetigt('einen neuen Schlüssel erzeugen')) return;
+  setzeSchluessel(generateSecretKey());
+};
+$('#btn-import').onclick = () => {
+  // Wie „Neuer Schlüssel“: einen vorhandenen Schlüssel erst nach Backup und Rückfrage ersetzen
+  if (vorhanden && (backupVon !== pk || !ersetzenBestaetigt('einen anderen nsec importieren'))) return;
+  const s = prompt('nsec des Schiris eingeben:'); if (!s) return;
+  try {
+    const d = nip19.decode(s.trim()); if (d.type !== 'nsec') throw 0;
+    setzeSchluessel(d.data);
+  } catch { alert('Das ist kein gültiger nsec.'); }
+};
+
+// --- Relays ------------------------------------------------------------------
+// Abos laufen je Relay, damit die Seite weiß, welches Relay wirklich EOSE gemeldet hat.
+// (subscribeMany meldet EOSE auch nach einer Wartezeit oder wenn ein Relay nicht erreichbar ist.)
+const wartet = new Map(RELAYS.map((url) => [url, new Map()])); // url → Map(Abo → seit, ms) ohne EOSE
+
+function abo(filter, { onevent, oneose, einmal = false }) {
+  const kennung = {}, subs = [];
+  let zu = false;
+  const ab = {
+    close() {
+      zu = true;
+      for (const s of subs.splice(0)) s.close();
+      for (const w of wartet.values()) w.delete(kennung);
+    },
+  };
+  for (const url of RELAYS) {
+    wartet.get(url).set(kennung, Date.now());
+    // Ohne Verbindung bleibt das Abo in `wartet` und gilt nach der Frist als „antwortet nicht“
+    pool.ensureRelay(url, { connectionTimeout: EOSE_FRIST }).then((relay) => {
+      if (zu) return;
+      const sub = relay.subscribe([{ ...filter }], {
+        onevent, eoseTimeout: EOSE_NIE,
+        oneose: () => {
+          wartet.get(url).delete(kennung);
+          oneose?.(url);
+          if (einmal) sub.close();
+        },
+      });
+      subs.push(sub);
+    }, () => {});
+  }
+  if (einmal) setTimeout(() => ab.close(), 2 * EOSE_FRIST);
+  return ab;
+}
+
+const verbunden = new Map(); // url → zuletzt gesehener Verbindungsstatus
+const warAn = new Set();     // Relays, die in dieser Sitzung schon verbunden waren
+
+function zeigeRelays() {
+  const st = pool.listConnectionStatus(), n = Date.now();
+  let wieder = false;
+  $('#relays').innerHTML = '';
+  for (const url of RELAYS) {
+    const an = st.get(url) ?? st.get(url + '/');
+    if (an === true && verbunden.get(url) === false && warAn.has(url)) wieder = true;
+    if (an !== undefined) verbunden.set(url, an);
+    if (an === true) warAn.add(url);
+    const stumm = [...wartet.get(url).values()].some((seit) => n - seit > EOSE_FRIST);
+    const div = document.createElement('div'); div.className = 'relay';
+    div.innerHTML = `<span class="punkt ${an === true && !stumm ? 'an' : an === false || stumm ? 'aus' : ''}"></span>`
+      + '<span class="mono"></span><span class="muted"></span>';
+    div.children[1].textContent = url.replace('wss://', '');
+    div.children[2].textContent = stumm ? 'antwortet nicht' : '';
+    $('#relays').append(div);
+  }
+  // Nach einer Wiederverbindung alle Abos neu aufsetzen, damit nichts verschluckt wird
+  if (wieder) erneuere();
+}
+
+// --- Events und Abos ---------------------------------------------------------
+const events = new Map();   // id → Event
+const evsVon = new Map();   // Partie-ID → Events
+const partien = new Map();  // Partie-ID → { g, abo, bereit, seit, erledigt, p, aktion }
+// Was dieser Schiri schon gesendet hat, aus zwei Quellen: IndexedDB (jedes Event, das er signiert,
+// steht dort, bevor es gesendet wird) und eigene Events von den Relays. Schlüssel: start:<g>,
+// ergebnis:<g>, ack:<zug-id>, ply:<g>:<ply>.
+const gesendet = new Set();
+const protokoll = [];
+let hauptAbo = null, hauptSeit = 0, hauptBereit = false;
+let geladen = false; // IndexedDB gelesen, Abos laufen
+
+function verarbeite(ev) {
+  if (events.has(ev.id) || !lies(ev)) return;
+  const g = partieVon(ev);
+  events.set(ev.id, ev);
+  if (!evsVon.has(g)) evsVon.set(g, []);
+  evsVon.get(g).push(ev);
+  if (ev.pubkey === pk) merkeGesendet(ev);
+  // Eine Partie, die diesen Schlüssel als Schiri nennt: alle ihre Events abonnieren
+  if (ev.kind === KIND && ev.c.t === 'create' && ev.tags.some((t) => t[0] === 'schiri' && t[1] === pk)) folge(g);
+  plane();
+}
+
+function merkeGesendet(ev) {
+  const g = partieVon(ev);
+  if (ev.kind === KIND_ACK) {
+    const ziel = ev.tags.find((t) => t[0] === 'e')[1];
+    gesendet.add(`ack:${ziel}`);
+    const ply = events.get(ziel)?.c?.ply;
+    if (ply !== undefined) gesendet.add(`ply:${g}:${ply}`);
+  } else if (ev.c.t === 'start' || ev.c.t === 'ergebnis') {
+    gesendet.add(`${ev.c.t}:${g}`);
+  }
+}
+
+// Hat dieser Schiri für `ply` der Partie schon einen Zug bestätigt (auch einen anderen)?
+const plyBestaetigt = (g, ply) => gesendet.has(`ply:${g}:${ply}`) || (evsVon.get(g) ?? []).some((a) =>
+  a.kind === KIND_ACK && a.pubkey === pk && events.get(a.tags.find((t) => t[0] === 'e')[1])?.c?.ply === ply);
+
+function abonniere() {
+  hauptAbo?.close();
+  hauptSeit = Date.now(); hauptBereit = false;
+  hauptAbo = abo({ kinds: [KIND], '#p': [pk], since: jetzt() - ZURUECK }, {
+    onevent: verarbeite, oneose: () => { hauptBereit = true; },
+  });
+}
+
+function folge(g) {
+  if (partien.has(g)) return;
+  const partie = { g, abo: null, bereit: false, seit: Date.now(), erledigt: gesendet.has(`ergebnis:${g}`), p: null, aktion: '' };
+  partien.set(g, partie);
+  aboFuer(partie);
+}
+
+// Gehandelt wird erst, wenn mindestens ein Relay wirklich EOSE gemeldet hat: Dann kennt die Seite
+// dessen gespeicherte Events, auch die eigenen. Was die übrigen Relays noch nicht geliefert haben,
+// steht in IndexedDB. Erledigte Partien (mit eigenem ergebnis) werden nur einmal geladen, für die
+// Übersicht, und nicht weiter abonniert.
+function aboFuer(partie) {
+  partie.abo?.close();
+  partie.abo = abo({ kinds: [KIND, KIND_ACK], '#g': [partie.g] }, {
+    onevent: verarbeite, einmal: partie.erledigt,
+    oneose: () => { partie.bereit = true; plane(); },
+  });
+}
+
+// Alle Abos neu aufsetzen (alle 5 Minuten und nach jeder Wiederverbindung eines Relays)
+function erneuere() {
+  if (!geladen) return;
+  abonniere();
+  for (const partie of partien.values()) if (!partie.erledigt) aboFuer(partie);
+}
+setInterval(erneuere, NEU_ABONNIEREN);
+
+// --- IndexedDB: eigene Events ------------------------------------------------
+// Eine Datenbank je Schiri-Schlüssel. Jedes Event, das der Schiri signiert (außer Lebenszeichen),
+// steht dort, bevor es gesendet wird: { id, g, ev, ply } (ply nur beim ack).
+let db = null, dbVon = null, lauf = 0;
+
+function oeffneDb(name) {
+  return new Promise((ok, fehler) => {
+    const r = indexedDB.open(name, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('events', { keyPath: 'id' });
+    r.onsuccess = () => { r.result.onversionchange = () => r.result.close(); ok(r.result); };
+    r.onerror = () => fehler(r.error);
+    r.onblocked = () => fehler(new Error('IndexedDB blockiert'));
+  });
+}
+
+function gespeicherteEvents(d) {
+  return new Promise((ok, fehler) => {
+    const r = d.transaction('events').objectStore('events').getAll();
+    r.onsuccess = () => ok(r.result); r.onerror = () => fehler(r.error);
+  });
+}
+
+// Nur die Felder eines Nostr-Events (lies() hängt `c` an)
+const roh = ({ id, pubkey, created_at, kind, tags, content, sig }) => ({ id, pubkey, created_at, kind, tags, content, sig });
+
+function speichere(ev, ply) {
+  return new Promise((ok) => {
+    if (!db || dbVon !== ev.pubkey) return ok(false);
+    try {
+      const tx = db.transaction('events', 'readwrite');
+      tx.objectStore('events').put({ id: ev.id, g: partieVon(ev), ev: roh(ev), ...(ply !== undefined ? { ply } : {}) });
+      tx.oncomplete = () => ok(true);
+      tx.onerror = tx.onabort = () => ok(false);
+    } catch { ok(false); }
+  });
+}
+
+// Beim Laden und nach einem Schlüsselwechsel: eigene Events aus IndexedDB lesen, offene Partien
+// wieder verfolgen, deren gespeicherte Events noch einmal senden und dann abonnieren.
+async function beginne() {
+  const meinLauf = ++lauf;
+  geladen = false;
+  db?.close(); db = null; dbVon = null;
+  let d = null, liste = [];
+  try {
+    d = await oeffneDb(`nostr-schach-schiri-${pk}`);
+    liste = await gespeicherteEvents(d);
+  } catch {
+    d?.close(); d = null; liste = [];
+  }
+  if (meinLauf !== lauf) { d?.close(); return; }
+  db = d; dbVon = d ? pk : null;
+  $('#speicher').textContent = d ? '' : 'IndexedDB nicht verfügbar: nur die Relays schützen vor doppelten Events';
+  $('#speicher').className = d ? '' : 'warn';
+
+  const nachPartie = new Map();
+  for (const r of liste) {
+    if (r?.ev?.pubkey !== pk) continue;
+    if (r.ply !== undefined) gesendet.add(`ply:${r.g}:${r.ply}`);
+    verarbeite(r.ev);
+    const ev = events.get(r.id);
+    if (!ev) continue;
+    if (!nachPartie.has(r.g)) nachPartie.set(r.g, []);
+    nachPartie.get(r.g).push(ev);
+  }
+  // Gleiche Event-ID, also harmlos; schließt Lücken, falls ein Senden vor dem Neuladen nicht
+  // ankam. Von erledigten Partien nur das ergebnis.
+  const grenze = jetzt() - ZURUECK, erneut = [];
+  for (const [g, evs] of nachPartie) {
+    if (Math.max(...evs.map((e) => e.created_at)) < grenze) continue;
+    const erledigt = gesendet.has(`ergebnis:${g}`);
+    erneut.push(...evs.filter((e) => !erledigt || e.c?.t === 'ergebnis'));
+    folge(g);
+  }
+  for (const ev of erneut) for (const p of pool.publish(RELAYS, roh(ev))) p.catch(() => {});
+  if (erneut.length) hinweis(`${erneut.length} gespeicherte eigene Event(s) erneut an die Relays gesendet`);
+
+  geladen = true;
+  abonniere();
+  zeige();
+}
+
+// Neuer Schlüssel: alles vergessen und neu beginnen (das Protokoll bleibt stehen)
+function neuBeginnen() {
+  for (const partie of partien.values()) partie.abo?.close();
+  hauptAbo?.close(); hauptAbo = null;
+  partien.clear(); events.clear(); evsVon.clear(); gesendet.clear();
+  zeige();
+  beginne();
+}
+
+// --- Handeln -----------------------------------------------------------------
+let geplant = false;
+function plane() {
+  if (geplant) return; geplant = true;
+  setTimeout(() => { geplant = false; handle(); });
+}
+
+// Jede Sekunde: Aussetzer erkennen (gedrosselte Timer), auswerten, Lebenszeichen. Die Uhren
+// rechnet baue() aus den Zeitstempeln, nicht aus diesem Takt.
+let letzterTakt = Date.now();
+function takt() {
+  const n = Date.now(), luecke = n - letzterTakt;
+  letzterTakt = n;
+  if (luecke > AUSSETZER) hinweis(`Aussetzer: ${Math.round(luecke / 1000)} s ohne Takt (seit ${uhrzeit(new Date(n - luecke))})`);
+  handle();
+  if (geladen && n - lebenszeichenZuletzt >= LEBENSZEICHEN_ALLE) lebenszeichen();
+}
+setInterval(takt, 1000);
+
+// Jede Partie mit baue() auswerten und, wo nötig, start, ack oder ergebnis senden
+function handle() {
+  const t = jetzt();
+  for (const partie of partien.values()) {
+    const p = baue(evsVon.get(partie.g) ?? [], t);
+    partie.p = p;
+    if (!partie.bereit || partie.erledigt) continue;
+    if (p && p.schiri === pk) entscheide(partie, p, t);
+    // Mit eigenem ergebnis ist die Partie erledigt: nicht weiter abonnieren
+    if (gesendet.has(`ergebnis:${partie.g}`)) { partie.erledigt = true; partie.abo?.close(); partie.abo = null; }
+  }
+  zeige();
+  zeigeWarnung();
+}
+
+// Antwortet kein Relay (kein EOSE nach der Frist), handelt die Seite nicht und sagt das deutlich
+function zeigeWarnung() {
+  const n = Date.now();
+  const stumm = (geladen && !hauptBereit && n - hauptSeit > EOSE_FRIST)
+    || [...partien.values()].some((x) => !x.bereit && !x.erledigt && n - x.seit > EOSE_FRIST);
+  $('#kein-relay').classList.toggle('versteckt', !stumm);
+}
+
+function entscheide(partie, p, t) {
+  const g = p.g;
+  const basis = [['t', TAG], ['g', g]];
+  if (p.ergebnis || gesendet.has(`ergebnis:${g}`)) return;
+  if (p.ende) {
+    if (!MELDEN.includes(p.ende.art) || !p.ausloeser) return;
+    const { art, verlierer } = p.ende;
+    return sende(partie, `ergebnis ${art}${verlierer ? ` (${verlierer === 'w' ? 'Weiß' : 'Schwarz'} verliert)` : ''}`, {
+      kind: KIND, created_at: Math.max(t, p.create.created_at),
+      tags: [...basis, ['e', p.ausloeser.id]], content: JSON.stringify({ t: 'ergebnis', art, verlierer }),
+    });
+  }
+  if (p.join && !p.start) {
+    if (gesendet.has(`start:${g}`)) return;
+    return sende(partie, 'start', {
+      kind: KIND, created_at: Math.max(t, p.join.created_at),
+      tags: [...basis, ['e', p.join.id]], content: JSON.stringify({ t: 'start' }),
+    });
+  }
+  const z = p.ausstehend;
+  if (!z || gesendet.has(`ack:${z.id}`) || plyBestaetigt(g, z.c.ply)) return;
+  sende(partie, `ack Zug ${z.c.ply}${z.c.san ? ` (${z.c.san})` : ''}`, {
+    kind: KIND_ACK, created_at: Math.max(t, z.created_at),
+    tags: [...basis, ['e', z.id, '', 'attests']], content: '',
+  });
+}
+
+async function sende(partie, text, vorlage) {
+  const ev = finalizeEvent(vorlage, sk);
+  const ziel = ev.kind === KIND_ACK ? ev.tags.find((t) => t[0] === 'e')[1] : null;
+  const ply = ziel ? events.get(ziel)?.c?.ply : undefined;
+  verarbeite(ev); // merkt es sofort als gesendet
+  const eintrag = { zeit: uhrzeit(), g: partie.g, text, ok: null, gespeichert: null };
+  protokoll.unshift(eintrag);
+  partie.aktion = `${eintrag.zeit} ${text}`;
+  zeigeProtokoll();
+  // Erst in IndexedDB, dann an die Relays
+  eintrag.gespeichert = await speichere(ev, ply);
+  const r = await Promise.allSettled(pool.publish(RELAYS, ev));
+  eintrag.ok = r.filter((x) => x.status === 'fulfilled').length;
+  zeigeProtokoll();
+}
+
+// Lebenszeichen (kind 14664, ersetzbar): jede Minute, nicht in IndexedDB und nicht im Protokoll
+let lebenszeichenZuletzt = Date.now() - LEBENSZEICHEN_ALLE + EOSE_FRIST; // das erste nach 5 s
+function lebenszeichen() {
+  lebenszeichenZuletzt = Date.now();
+  const laufend = meinePartien().filter((x) => !x.p.ende).length;
+  const ev = finalizeEvent({ kind: KIND_LEBENSZEICHEN, created_at: jetzt(), content: '',
+    tags: [['t', TAG], ['laufend', String(laufend)]] }, sk);
+  const zeit = uhrzeit(), el = $('#lebenszeichen');
+  el.textContent = `Lebenszeichen: ${zeit}, wird gesendet …`;
+  Promise.allSettled(pool.publish(RELAYS, ev)).then((r) => {
+    const ok = r.filter((x) => x.status === 'fulfilled').length;
+    el.textContent = `Letztes Lebenszeichen: ${zeit}, an ${ok} von ${RELAYS.length} Relays`;
+    el.className = ok ? '' : 'warn';
+  });
+}
+
+function hinweis(text) {
+  protokoll.unshift({ zeit: uhrzeit(), text, hinweis: true });
+  zeigeProtokoll();
+}
+
+// --- Wach bleiben ------------------------------------------------------------
+let wachSperre = null;
+function zeigeWach(text, ok) { $('#wach').textContent = text; $('#wach').className = ok ? 'ok' : 'warn'; }
+
+async function wachBleiben() {
+  if (document.hidden || wachSperre) return;
+  if (!navigator.wakeLock) return zeigeWach('Wake Lock nicht verfügbar', false);
+  try {
+    const sperre = await navigator.wakeLock.request('screen');
+    wachSperre = sperre;
+    zeigeWach('Bildschirm bleibt an', true);
+    sperre.addEventListener('release', () => {
+      if (wachSperre === sperre) wachSperre = null;
+      zeigeWach('Wake Lock aufgehoben', false);
+    });
+  } catch {
+    zeigeWach('Wake Lock nicht verfügbar', false);
+  }
+}
+
+function zeigeSichtbarkeit() {
+  const hinten = document.hidden;
+  $('#offen-lassen').classList.toggle('hinten', hinten);
+  $('#offen-lassen').textContent = hinten
+    ? 'Tab im Hintergrund, Timer werden gedrosselt. Bitte in den Vordergrund holen.'
+    : 'Dieser Tab ist der Schiri. Offen lassen.';
+}
+
+document.addEventListener('visibilitychange', () => {
+  zeigeSichtbarkeit();
+  if (!document.hidden) wachBleiben(); // der Browser gibt die Sperre im Hintergrund frei
+});
+
+// --- Übersicht ---------------------------------------------------------------
+const FARBE = { w: 'Weiß', b: 'Schwarz' };
+const ART = { matt: 'Matt', remis: 'Remis', aufgabe: 'Aufgabe', zeit: 'Zeit', abbruch: 'Abbruch',
+  doppelzug: 'Doppelzug', annulliert: 'Annulliert' };
+
+function statusVon(p) {
+  if (p.ende) {
+    const { art, verlierer } = p.ende;
+    return (ART[art] ?? art) + (verlierer ? ` – ${FARBE[verlierer === 'w' ? 'b' : 'w']} gewinnt` : '')
+      + (p.ergebnis ? ' (gemeldet)' : '');
+  }
+  if (!p.join) return 'wartet auf Gegner';
+  if (!p.start) return 'wartet auf start';
+  if (p.ausstehend) return `Zug ${p.ausstehend.c.ply} wartet auf ack`;
+  return `${FARBE[p.chess.turn()]} am Zug`;
+}
+
+function zelle(tr, text, klasse) {
+  const td = document.createElement('td');
+  td.textContent = text; if (klasse) td.className = klasse;
+  tr.append(td); return td;
+}
+
+function tabelle(sel, liste, leer) {
+  const table = $(sel);
+  table.innerHTML = '<thead><tr><th>Partie</th><th>Weiß</th><th>Schwarz</th><th class="zahl">Ply</th>'
+    + '<th>Uhr Weiß</th><th>Uhr Schwarz</th><th>Status</th><th>Letzte Aktion</th></tr></thead>';
+  const tbody = document.createElement('tbody');
+  if (!liste.length) {
+    const tr = document.createElement('tr');
+    zelle(tr, leer, 'muted').colSpan = 8;
+    tbody.append(tr);
+  }
+  for (const { g, p, aktion, bereit } of liste) {
+    const tr = document.createElement('tr');
+    tr.dataset.g = g;
+    zelle(tr, g, 'mono id');
+    zelle(tr, p.spieler.w ? kurz(p.spieler.w) : '–', 'mono');
+    zelle(tr, p.spieler.b ? kurz(p.spieler.b) : '–', 'mono');
+    zelle(tr, String(p.zuege.length), 'zahl');
+    for (const f of ['w', 'b']) zelle(tr, p.join ? mmss(p.uhr[f]) : '–', 'uhr' + (p.uhr.amZug === f ? ' laeuft' : ''));
+    zelle(tr, bereit || p.ende ? statusVon(p) : 'wartet auf ein Relay (EOSE)', 'status');
+    zelle(tr, aktion || '–', 'aktion muted');
+    tbody.append(tr);
+  }
+  table.append(tbody);
+}
+
+function zeigeProtokoll() {
+  const ol = $('#protokoll'); ol.innerHTML = '';
+  if (!protokoll.length) { ol.innerHTML = '<li class="muted">Noch nichts gesendet.</li>'; return; }
+  for (const e of protokoll.slice(0, 200)) {
+    const li = document.createElement('li');
+    if (e.hinweis) { li.textContent = `${e.zeit} · ${e.text}`; li.className = 'muted'; ol.append(li); continue; }
+    li.textContent = `${e.zeit} · ${e.g} · ${e.text}` + (e.gespeichert === false ? ' · nicht in IndexedDB gespeichert' : '')
+      + (e.ok === null ? ' · wird gesendet …'
+        : e.ok ? ` · an ${e.ok} von ${RELAYS.length} Relays` : ' · kein Relay hat es angenommen');
+    ol.append(li);
+  }
+}
+
+// Partien, in denen dieser Schlüssel Schiri ist (Stand der letzten Auswertung)
+const meinePartien = () => [...partien.values()].filter((x) => x.p && x.p.schiri === pk);
+
+function zeige() {
+  const meine = meinePartien().sort((a, b) => b.p.letzte - a.p.letzte);
+  tabelle('#laufend', meine.filter((x) => !x.p.ende), 'Keine laufenden Partien.');
+  tabelle('#beendet', meine.filter((x) => x.p.ende), 'Keine beendeten Partien.');
+}
+
+// --- Start -------------------------------------------------------------------
+schluesselLaden();
+zeigeSchluessel();
+zeigeRelays();
+setInterval(zeigeRelays, 1500);
+zeigeProtokoll();
+zeigeSichtbarkeit();
+wachBleiben();
+zeige();
+beginne();
+</script>
+</body>
+</html>
