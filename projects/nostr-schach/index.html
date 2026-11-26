@@ -142,7 +142,7 @@
 </main>
 
 <!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
-<footer>Nostr-Schach <span id="version">v0.1.3</span></footer>
+<footer>Nostr-Schach <span id="version">v0.1.4</span></footer>
 
 <script type="importmap">
 { "imports": {
@@ -440,8 +440,12 @@ async function klick(feld, p, ichAmZug) {
     const zug = p.chess.moves({ square: gewaehlt, verbose: true }).find((m) => m.to === feld);
     if (zug) {
       const von = gewaehlt; gewaehlt = null;
+      // Kette: Verweis auf den letzten gezählten Zug, beim ersten Zug auf das create. Ein Zug darf
+      // nicht älter sein als sein Vorgänger, falls die eigene Uhr nachgeht.
+      const vorher = p.ids.length ? events.get(p.ids.at(-1)) : p.create;
       await sende({
-        tags: [['t', TAG], ['g', aktuell]],
+        created_at: Math.max(jetzt(), vorher.created_at),
+        tags: [['t', TAG], ['g', aktuell], ['e', vorher.id]],
         content: JSON.stringify({ t: 'move', ply: p.zuege.length + 1, from: von, to: feld,
                                   promotion: zug.promotion ? 'q' : undefined, san: zug.san }),
       });
