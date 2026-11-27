@@ -248,18 +248,29 @@ export function starteEinsatz(ctx) {
     const gutschrift = recht[f].reduce((s, e) => s + (st.antraege?.[e.farbe]?.betrag ?? (e.summe - e.gebuehr)), 0);
     const fertig = !!st.fertig;
     const r = { recht, fertig, st, f };
+    // `kurz`: für die Lobby (geldKurz)
+    const ohneGeld = 'kein Geld geflossen';
     if (MIT_VERLIERER.includes(art)) {
-      if (verlierer === f) return { ...r, ausgang: 'verloren', text: eigen ? `Verloren: −${betrag} sat` : 'Verloren.', betrag: eigen ? `−${betrag} sat` : 'Kein Geld geflossen.' };
-      return { ...r, ausgang: 'gewonnen', text: `Gewonnen: +${gutschrift} sat (nach Gebühr der Mint)`, betrag: `+${gutschrift} sat`, zusatz: '(nach Gebühr der Mint)' };
+      if (verlierer === f) return { ...r, ausgang: 'verloren', text: eigen ? `Verloren: −${betrag} sat` : 'Verloren.', betrag: eigen ? `−${betrag} sat` : 'Kein Geld geflossen.', kurz: eigen ? `−${betrag} sat` : ohneGeld };
+      return { ...r, ausgang: 'gewonnen', text: `Gewonnen: +${gutschrift} sat (nach Gebühr der Mint)`, betrag: `+${gutschrift} sat`, zusatz: '(nach Gebühr der Mint)', kurz: `+${gutschrift} sat` };
     }
     if (!eigen) {
       const text = art === 'nicht-bezahlt' ? 'Du hast nicht rechtzeitig bezahlt. Die Partie hat nicht begonnen, es ist kein Geld geflossen.'
         : 'Du hattest keinen Einsatz gesperrt, es ist kein Geld geflossen.';
-      return { ...r, ausgang: 'ohne', text, betrag: 'Kein Geld geflossen.' };
+      return { ...r, ausgang: 'ohne', text, betrag: 'Kein Geld geflossen.', kurz: ohneGeld };
     }
     const anlass = ANLASS[art] ?? 'Partie beendet';
     return { ...r, ausgang: 'zurueck', text: `${anlass}: dein Einsatz ${fertig ? 'ist zurück' : 'kommt zurück'} (${gutschrift} sat nach Gebühr der Mint).`,
-      betrag: `Einsatz zurück: ${gutschrift} sat`, zusatz: `(${anlass}, nach Gebühr der Mint)` };
+      betrag: `Einsatz zurück: ${gutschrift} sat`, zusatz: `(${anlass}, nach Gebühr der Mint)`, kurz: `Einsatz zurück (${gutschrift} sat)` };
+  }
+
+  // Kurz für die Lobby („Meine Partien“): Geld nach dem verbindlichen ergebnis aus eigener Sicht
+  // („+198 sat“, „−100 sat“, „Einsatz zurück (99 sat)“), null, wenn es nichts zu sagen gibt.
+  // Ohne die Schlüssel der Mint (lädt takt() für eigene Partien) ist der Betrag noch unbekannt.
+  function geldKurz(p) {
+    if (!p?.einsatz || !p.ergebnis || !farbe(p)) return null;
+    if (!p.mintSchluessel) return W.wallet ? 'Betrag lädt …' : null;
+    return geld(p).kurz;
   }
 
   // Geld im Ergebnis-Kasten (index.html): Betrag und Stand des Einlösens, jede Sekunde neu
@@ -294,5 +305,5 @@ export function starteEinsatz(ctx) {
       onclick: () => W.holeZurueck(url, g) }, 'Zurückholen'));
   }
 
-  return { schluessel, neuesEvent, eigenePartien, takt, zeichne, zeichneKasten, stand: lade };
+  return { schluessel, neuesEvent, eigenePartien, takt, zeichne, zeichneKasten, geldKurz, stand: lade };
 }

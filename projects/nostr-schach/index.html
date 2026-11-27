@@ -13,11 +13,11 @@
   :root {
     --bg: #f4f1ea; --fg: #1d1d1b; --muted: #6b6860; --card: #ffffff; --line: #ddd8cc;
     --hell: #ecd9b4; --dunkel: #b58863; --akzent: #7b4fd6; --ok: #2e8b57; --warn: #c0392b;
-    --markiert: rgba(123, 79, 214, .45); --letzter: rgba(255, 214, 10, .45);
+    --markiert: rgba(123, 79, 214, .45); --letzter: rgba(255, 214, 10, .45); --plakette: #e6dfd0;
   }
   @media (prefers-color-scheme: dark) {
     :root { --bg: #17161a; --fg: #ece9e1; --muted: #9a968c; --card: #222126; --line: #35333a;
-            --hell: #c9b48f; --dunkel: #8a6648; }
+            --hell: #c9b48f; --dunkel: #8a6648; --plakette: #d8d1c2; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
@@ -65,13 +65,18 @@
                                    background: radial-gradient(rgba(192, 57, 43, .75), rgba(192, 57, 43, 0) 70%); }
   /* Geschlagene Figuren je Spieler und Materialvorsprung */
   .spieler-zeile { justify-content: space-between; flex-wrap: nowrap; max-width: 560px; margin-left: auto; margin-right: auto; }
-  .spieler-zeile > span:first-child { flex: none; }
-  .geschlagen { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; min-height: 20px; }
-  .geschlagen .gruppe { display: inline-flex; margin-right: 6px; }
-  .geschlagen.cg-wrap piece { position: static; display: inline-block; width: 20px; height: 20px; margin-right: -7px;
+  /* Name und geschlagene Figuren: Die Figuren bleiben in einer Reihe und rutschen als Ganzes unter
+     den Namen, wenn neben ihm der Platz fehlt */
+  .spieler-links { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; row-gap: 2px; }
+  .geschlagen { flex: none; display: flex; align-items: center; flex-wrap: nowrap; white-space: nowrap; }
+  .geschlagen:empty { display: none; }
+  /* Helle Plakette je Figurenart: schwarze Figuren auch im dunklen Farbschema gut zu sehen */
+  .geschlagen .gruppe { display: inline-flex; margin-right: 4px; padding: 1px 4px; border-radius: 6px;
+                        background: var(--plakette); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+  .geschlagen.cg-wrap piece { position: static; display: inline-block; width: 26px; height: 26px; margin-right: -9px;
                               background-size: contain; background-repeat: no-repeat; }
   .geschlagen.cg-wrap .gruppe piece:last-child { margin-right: 0; }
-  .geschlagen .vorsprung { margin-left: 10px; font-weight: 600; font-size: 13px; color: var(--muted); }
+  .geschlagen .vorsprung { margin-left: 6px; font-weight: 600; font-size: 14px; color: var(--muted); }
   /* Ergebnis-Kasten über dem Brett */
   #ergebnis { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5;
               width: min(90%, 400px); padding: 16px 18px 14px; border-radius: 12px; text-align: center;
@@ -95,7 +100,10 @@
   .uhr.laeuft { background: var(--akzent); border-color: var(--akzent); color: #fff; }
   .uhr.laeuft.knapp { background: var(--warn); border-color: var(--warn); }
   #status { text-align: center; font-weight: 600; margin: 12px 0 4px; min-height: 1.5em; }
-  #zuege { max-height: 180px; overflow: auto; }
+  #zuege { max-height: 180px; overflow: auto; word-break: normal; }
+  #zuege .zug, .npub { white-space: nowrap; word-break: normal; }
+  ul.partien li[data-ausgang=gewonnen] { border-left: 4px solid var(--ok); }
+  ul.partien li[data-ausgang=verloren] { border-left: 4px solid var(--warn); }
   .hinweis { padding: 8px 10px; border-radius: 8px; background: var(--bg); font-size: 13px; }
   .hinweis.warn { border: 1px solid var(--warn); color: var(--warn); font-weight: 600; }
   .online { color: var(--ok); } .offline, .fremd { color: var(--warn); }
@@ -169,7 +177,7 @@
       </div>
       <div class="reihe" style="margin-top:8px">
         <label><input type="checkbox" id="mit-schiri" checked> Schiri-Partie</label>
-        <span class="muted">Schiri <span id="schiri-standard" class="mono"></span></span>
+        <span class="muted">Schiri <span id="schiri-standard" class="mono npub"></span></span>
         <span id="schiri-standard-status" class="muted"></span>
       </div>
       <div class="reihe" style="margin-top:8px" id="einsatz-wahl">
@@ -207,8 +215,10 @@
       </div>
       <div id="schiri-kopf" class="muted"></div>
       <div class="reihe spieler-zeile" style="margin-top:6px">
-        <span id="gegner-oben" class="muted"></span>
-        <span id="geschlagen-oben" class="geschlagen cg-wrap"></span>
+        <span class="spieler-links">
+          <span id="gegner-oben" class="muted"></span>
+          <span id="geschlagen-oben" class="geschlagen cg-wrap"></span>
+        </span>
         <span id="uhr-oben" class="uhr"></span>
       </div>
       <div id="brett-rahmen">
@@ -228,8 +238,10 @@
         </div>
       </div>
       <div class="reihe spieler-zeile" style="margin-top:6px">
-        <span id="gegner-unten" class="muted"></span>
-        <span id="geschlagen-unten" class="geschlagen cg-wrap"></span>
+        <span class="spieler-links">
+          <span id="gegner-unten" class="muted"></span>
+          <span id="geschlagen-unten" class="geschlagen cg-wrap"></span>
+        </span>
         <span id="uhr-unten" class="uhr"></span>
       </div>
       <div id="status"></div>
@@ -279,7 +291,7 @@
 </main>
 
 <!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
-<footer>Nostr-Schach <span id="version">v0.1.16</span></footer>
+<footer>Nostr-Schach <span id="version">v0.1.17</span></footer>
 
 <script type="module">
 import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19 } from 'nostr-tools';
@@ -480,7 +492,7 @@ function zeigeSchiriStatus() {
   const teil = (text, klasse) => { const el = document.createElement('span'); el.textContent = text; if (klasse) el.className = klasse; kopf.append(el); };
   const sp = schiriStatus(p.schiri);
   teil(p.einsatz ? 'Schiri-Partie mit Einsatz · Schiri ' : 'Schiri-Partie · Schiri ');
-  teil(kurz(p.schiri), 'mono');
+  teil(kurz(p.schiri), 'mono npub');
   if (p.schiri !== SCHIRI) teil(' · nicht der Standard-Schiri', 'fremd');
   teil(' · ');
   teil(sp.text, sp.online ? 'online' : 'offline');
@@ -530,20 +542,46 @@ function zeigeLobby() {
     if (beteiligt) mein.push(p);
     else if (!p.spieler.w || !p.spieler.b) offen.push(p);
   }
-  for (const g of meine()) if (!partienIds.has(g)) mein.push({ g, nurId: true, letzte: 0 });
-  offen.sort((a, b) => b.letzte - a.letzte); mein.sort((a, b) => b.letzte - a.letzte);
+  // Noch nicht geladene eigene Partien (nur die ID aus dem localStorage) stehen hinten, in der
+  // Reihenfolge der Liste (zuletzt angelegt bzw. beigetreten zuerst)
+  meine().forEach((g, i) => { if (!partienIds.has(g)) mein.push({ g, nurId: true, letzte: 0, rang: i }); });
+  pruefeEigeneAbos(mein.map((p) => p.g));
+  offen.sort((a, b) => b.letzte - a.letzte);
+  // Meine Partien: neueste zuerst (nach dem create)
+  mein.sort((a, b) => (a.nurId - b.nurId) || (a.nurId ? a.rang - b.rang : b.create.created_at - a.create.created_at));
   liste('#offen', offen.slice(0, 15), 'Gerade keine offenen Partien – leg doch eine an.', (p) => {
     const farbe = p.create.c.farbe === 'w' ? 'Schwarz' : 'Weiß';
     return [`${kurz(p.create.pubkey)} sucht Gegner · du spielst ${farbe}${einsatzText(p)} · ${schiriText(p)}`, 'Ansehen', mintHinweis(p)];
   });
   liste('#meine', mein.slice(0, 15), 'Noch keine.', (p) => {
     if (p.nurId) return [`Partie ${p.g} (lädt …)`, 'Öffnen'];
-    const status = p.ende ? 'beendet' : (!p.spieler.w || !p.spieler.b) ? 'wartet auf Gegner'
+    const status = p.ende ? ausgang(p) : (!p.spieler.w || !p.spieler.b) ? 'wartet auf Gegner'
       : p.schiri && !p.start ? 'wartet auf den Schiri'
       : p.ausstehend ? 'Zug wartet auf Bestätigung'
       : (p.spieler[p.chess.turn()] === pk ? 'du bist am Zug' : 'Gegner am Zug');
-    return [`Partie ${p.g.slice(0, 6)} · ${p.zuege.length} Halbzüge · ${status}${einsatzText(p)} · ${schiriText(p)}`, 'Öffnen'];
+    // Die Zahl der Halbzüge erst, wenn ein Relay alle Events der Partie (samt acks) geliefert hat
+    const halbzuege = geladen.has(p.g) ? `${p.zuege.length} Halbzüge` : 'Züge laden …';
+    return [`Partie ${p.g.slice(0, 6)} · ${halbzuege} · ${status}${einsatzText(p)} · ${schiriText(p)}`, 'Öffnen', null, p.ende ? ausgangArt(p) : null];
   });
+}
+
+// Ausgang einer beendeten eigenen Partie aus eigener Sicht, in Einsatz-Partien mit Geld;
+// ausgangArt für die Farbe (gewonnen, verloren, sonst null)
+const MIT_VERLIERER = ['matt', 'aufgabe', 'zeit', 'doppelzug'];
+const ausgangArt = (p) => {
+  if ((p.schiri && !p.ergebnis) || !MIT_VERLIERER.includes(p.ende.art)) return null;
+  return p.ende.verlierer === (p.spieler.w === pk ? 'w' : 'b') ? 'verloren' : 'gewonnen';
+};
+function ausgang(p) {
+  if (p.schiri && !p.ergebnis) return 'beendet, warte auf das Ergebnis des Schiris';
+  const ich = p.spieler.w === pk ? 'w' : 'b', e = p.ende;
+  const text = MIT_VERLIERER.includes(e.art) ? `${e.verlierer === ich ? 'verloren' : 'gewonnen'} (${GRUND[e.art]})`
+    : e.art === 'remis' ? 'Remis' : e.art === 'abbruch' ? 'abgebrochen' : e.art === 'annulliert' ? 'annulliert'
+      : e.art === 'nicht-bezahlt' ? (!e.verlierer ? 'nicht bezahlt' : e.verlierer === ich ? 'nicht bezahlt (du)' : 'nicht bezahlt (Gegner)')
+        : `beendet (${e.art})`;
+  // Geld nur mit den Schlüsseln der Mint (eigene Partie: die Seite lädt sie ohnehin zum Einlösen)
+  const geld = p.einsatz && E.geldKurz(baue(p.g));
+  return geld ? `${text}, ${geld}` : text;
 }
 
 // Für die Lobby: ob die Partie einen Schiri hat und welchen, und ihr Einsatz
@@ -559,8 +597,10 @@ function liste(sel, eintraege, leer, text) {
   const ul = $(sel); ul.innerHTML = '';
   if (!eintraege.length) { ul.innerHTML = `<li class="muted"></li>`; ul.firstChild.textContent = leer; return; }
   for (const p of eintraege) {
-    const [t, knopf, hinweis] = text(p);
+    const [t, knopf, hinweis, art] = text(p);
     const li = document.createElement('li');
+    li.dataset.g = p.g;
+    if (art) li.dataset.ausgang = art;
     const span = document.createElement('span'); span.textContent = t; span.className = 'muted';
     if (hinweis) span.append(el('span', { class: 'warn mint-hinweis' }, ` · ${hinweis}`));
     const b = document.createElement('button'); b.textContent = knopf; b.onclick = () => { location.hash = p.g; };
@@ -575,13 +615,25 @@ function abonniereLobby() {
     { onevent: verarbeite });
 }
 abonniereLobby();
-// Eigene Einsatz-Partien der letzten 2 Tage aus der Wallet (falls die Lobby sie nicht mehr liefert),
-// damit Bezahlen und Einlösen nach dem Neuladen weiterlaufen
-let eigeneSub = null;
-function abonniereEigene() {
+// Eigene Partien über #g, mit den acks des Schiris (kind 3410), damit „Meine Partien“ die Züge
+// zählen kann, ohne dass man die Partie öffnet: die gemerkten (localStorage), die aus der Lobby, in
+// denen ich mitspiele, und die Einsatz-Partien der letzten 2 Tage aus der Wallet (falls die Lobby sie
+// nicht mehr liefert), damit Bezahlen und Einlösen nach dem Neuladen weiterlaufen
+let eigeneSub = null, eigeneIds = new Set();
+const geladen = new Set(); // Partien, deren Events (samt acks) ein Abo bis EOSE geliefert hat
+function abonniereEigene(weitere = []) {
   eigeneSub?.close(); eigeneSub = null;
-  const gs = E.eigenePartien();
-  if (gs.length) eigeneSub = pool.subscribeMany(RELAYS, { kinds: [KIND], '#g': gs }, { onevent: verarbeite });
+  const gs = [...new Set([...E.eigenePartien(), ...meine(), ...weitere])].filter(gueltigeId);
+  eigeneIds = new Set(gs);
+  if (!gs.length) return;
+  eigeneSub = pool.subscribeMany(RELAYS, { kinds: [KIND, KIND_ACK], '#g': gs }, {
+    onevent: verarbeite,
+    oneose() { for (const g of gs) geladen.add(g); planeNeuzeichnen(); },
+  });
+}
+// Aus der Lobby: neue eigene Partie, die das Abo noch nicht kennt → neu abonnieren
+function pruefeEigeneAbos(gs) {
+  if (gs.some((g) => gueltigeId(g) && !eigeneIds.has(g))) abonniereEigene(gs);
 }
 
 // --- Neue Partie mit Einsatz ---------------------------------------------------------------
@@ -690,7 +742,9 @@ function oeffne(g) {
 // Mit kind 3410, damit die acks des Schiris ankommen (start und ergebnis sind kind 4664)
 function abonnierePartie() {
   partieSub?.close(); partieSub = null;
-  if (aktuell) partieSub = pool.subscribeMany(RELAYS, { kinds: [KIND, KIND_ACK], '#g': [aktuell] }, { onevent: verarbeite });
+  const g = aktuell;
+  if (g) partieSub = pool.subscribeMany(RELAYS, { kinds: [KIND, KIND_ACK], '#g': [g] },
+    { onevent: verarbeite, oneose() { geladen.add(g); planeNeuzeichnen(); } });
 }
 window.addEventListener('hashchange', () => oeffne(location.hash.slice(1)));
 
@@ -698,7 +752,7 @@ window.addEventListener('hashchange', () => oeffne(location.hash.slice(1)));
 // Beim Zurückkommen und regelmäßig neu abonnieren; doppelte Events werden über die ID verworfen.
 function auffrischen() {
   if (document.visibilityState !== 'visible') return;
-  abonniereLobby(); abonnierePartie(); abonniereLebenszeichen(); abonniereEigene();
+  abonniereLobby(); abonnierePartie(); abonniereLebenszeichen(); abonniereEigene([...eigeneIds]);
 }
 document.addEventListener('visibilitychange', auffrischen);
 window.addEventListener('pageshow', auffrischen);
@@ -842,12 +896,14 @@ function zeichne() {
     brett.append(div);
   }));
 
-  // Zugliste; in Schiri-Partien ist jeder gezählte Zug bestätigt (✓)
+  // Zugliste; in Schiri-Partien ist jeder gezählte Zug bestätigt (✓). Ein Zug (Nummer, SAN, ✓)
+  // steht in einem eigenen span und wird nie getrennt, umbrochen wird nur zwischen den Zügen.
   const zl = $('#zuege'); zl.innerHTML = '';
   const eintrag = (i, san, klasse, zusatz, titel) => {
-    zl.append((i % 2 === 0 ? `${i / 2 + 1}. ` : '') + san);
-    if (zusatz) { const el = document.createElement('span'); el.className = klasse; el.textContent = zusatz; el.title = titel; zl.append(el); }
-    zl.append(' ');
+    const zug = document.createElement('span'); zug.className = 'zug';
+    zug.append((i % 2 === 0 ? `${i / 2 + 1}. ` : '') + san);
+    if (zusatz) { const el = document.createElement('span'); el.className = klasse; el.textContent = zusatz; el.title = titel; zug.append(el); }
+    zl.append(zug, ' ');
   };
   p.zuege.forEach((z, i) => eintrag(i, z.san, 'bestaetigt', p.schiri ? ' ✓' : '', 'vom Schiri bestätigt'));
   if (offen) eintrag(p.zuege.length, offen.san, 'wartet', ' (wartet auf Bestätigung)', 'Der Schiri hat diesen Zug noch nicht bestätigt');
