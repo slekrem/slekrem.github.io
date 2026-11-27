@@ -1,7 +1,9 @@
 // Wallet-Kasten der Spieler-Seite (index.html, rechte Spalte unter „Identität“): Guthaben je Mint,
-// Aufladen per Lightning (mit QR-Code), Token einfügen, Auszahlen, Token exportieren, Umbuchen
-// zwischen Mints, Backup und die gesperrten Einsätze mit Rückholung. Dazu der Schutz beim Wechsel der
-// Identität und die Sperre, wenn dieselbe Wallet in zwei Tabs offen ist.
+// Aufladen per Lightning (mit QR-Code und Liste der offenen Aufladungen), Token einfügen, Auszahlen,
+// Token exportieren, Umbuchen zwischen Mints, Backup und die gesperrten Einsätze mit Rückholung.
+// Dazu der Schutz beim Wechsel der Identität, die Sperre, wenn dieselbe Wallet in zwei Tabs offen
+// ist, die Prüfung der Mints beim Laden (Mints, die gerade nicht alles können, sind ausgegraut) und
+// die Bestätigung jeder Gutschrift (grüner Kasten und Toast).
 //
 // Die Geldlogik steht in cashu.js (CashuWallet); hier entstehen nur Oberfläche und Ablauf. Kein
 // Token, Proof oder Schlüssel geht an console.log. Token zeigt die Seite nur beim Export.
@@ -14,6 +16,10 @@ const { MINTS, MINT } = window.EINSTELLUNGEN;
 const TAB_TAKT = 2000;          // ms; so oft erneuert der Tab mit der Wallet seinen Eintrag
 const TAB_ALT = 6000;           // ms; älter → der andere Tab ist weg
 const AUFLADEN_TAKT = 3000;     // ms; so oft fragt die Seite nach, ob eine Rechnung bezahlt ist
+const MINT_PRUEFEN = 10 * 60_000; // ms; so alt darf der geprüfte Stand einer Mint (pruefeMint) werden
+const MINT_NOCHMAL = 60_000;    // ms; nicht erreichbare Mint nach dieser Zeit erneut prüfen
+const BESTAETIGUNG_DAUER = 60_000; // ms; so lange steht die Bestätigung einer Gutschrift im Kasten
+const HERVOR_DAUER = 4000;      // ms; so lange ist das Guthaben einer Mint nach einer Gutschrift hervorgehoben
 const LS_TAB = 'nostr-schach.wallet-tab.';         // + pubkey: { id, zeit } des Tabs, der Geld bewegt
 const LS_HINWEIS = 'nostr-schach.wallet-hinweis.'; // + pubkey: erstes Aufladen geschafft (nsec-Hinweis gesehen)
 
@@ -58,6 +64,16 @@ export function frage({ titel, text, knoepfe }) {
   });
 }
 
+// Kurze Meldung oben auf der Seite (Toast), verschwindet nach `dauer` ms von selbst. `art`: 'ok' oder 'warn'.
+export function toast(text, { art = 'ok', dauer = 6000 } = {}) {
+  let box = document.querySelector('#toasts');
+  if (!box) { box = el('div', { id: 'toasts', role: 'status', 'aria-live': 'polite' }); document.body.append(box); }
+  const t = el('div', { class: `toast ${art}` }, text);
+  box.append(t);
+  setTimeout(() => { t.classList.add('weg'); setTimeout(() => t.remove(), 400); }, dauer);
+  return t;
+}
+
 // QR-Code als SVG (Module als ein Pfad). `gross`: Text in Großbuchstaben (alphanumerischer Modus,
 // kleinerer Code, z. B. für LIGHTNING:LNBC…). Passt der Text nicht, ein Hinweis statt des Codes.
 export function qrSvg(text, { gross = false } = {}) {
@@ -100,6 +116,7 @@ const GERUEST = `
   <p id="w-tab" class="hinweis warn versteckt">Diese Wallet ist schon in einem anderen Tab offen. Nur ein Tab
     sollte Geld bewegen: Hier sind Geldaktionen gesperrt, bis der andere Tab geschlossen ist.</p>
   <p id="w-meldung" class="muted"></p>
+  <div id="w-ok" class="bestaetigung versteckt" role="status"></div>
   <div id="w-mints" class="mints"></div>
   <details id="w-aufladen"><summary>Aufladen per Lightning</summary>
     <p id="w-auf-hinweis" class="hinweis">Das Guthaben liegt nur in diesem Browser. Sichere deinen nsec
@@ -109,10 +126,16 @@ const GERUEST = `
     <div class="reihe"><input id="w-auf-betrag" type="number" min="1" step="1" value="1000" class="zahl"> sat
       <button id="w-auf-los" class="geld">Rechnung erzeugen</button></div>
     <div id="w-auf-rechnung" class="versteckt">
-      <div id="w-auf-qr" class="qr"></div>
-      <textarea id="w-auf-text" class="mono" rows="3" readonly></textarea>
-      <div class="reihe"><button id="w-auf-kopieren">Kopieren</button><a id="w-auf-link" href="#">In Lightning-Wallet öffnen</a></div>
+      <div id="w-auf-daten">
+        <div id="w-auf-qr" class="qr"></div>
+        <textarea id="w-auf-text" class="mono" rows="3" readonly></textarea>
+        <div class="reihe"><button id="w-auf-kopieren">Kopieren</button><a id="w-auf-link" href="#">In Lightning-Wallet öffnen</a></div>
+      </div>
       <p id="w-auf-status" class="muted"></p>
+    </div>
+    <div id="w-auf-offen-box" class="versteckt">
+      <p class="muted">Offene Aufladungen (werden weiter geprüft und gutgeschrieben, sobald sie bezahlt sind):</p>
+      <ul id="w-auf-offen" class="liste"></ul>
     </div>
   </details>
   <details id="w-einfuegen"><summary>Token einfügen</summary>
@@ -172,6 +195,10 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
   let meldungZeit = null;
   const staende = new Map();    // Mint → { <partie-id>: Stand bei der Mint } (pruefeEinsaetze)
   const beobachtet = new Set(); // Quotes, deren Bezahlung die Seite gerade abwartet
+  const zwecke = new Map();     // Quote → Wofür (z. B. 'Umbuchung'), für die Bestätigung der Gutschrift
+  const mintStatus = new Map(); // Mint → { aufladen, auszahlen, alles, unbekannt, zeit } (pruefeMints)
+  const hervor = new Map();     // Mint → Zeitpunkt (ms) der letzten Gutschrift (Guthaben hervorgehoben)
+  let angezeigt = null;         // { url, quote, ablauf, abgelaufen } der Rechnung im Kasten
   let auszahlung = null, umbuchung = null;
 
   const meldung = (text, art = '', dauer = 0) => {
@@ -221,17 +248,55 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
   function setzeIdentitaet({ sk: neuSk, pk: neuPk }) {
     if (pk && halter && pk !== neuPk) ls.del(LS_TAB + pk);
     sk = neuSk ?? null; pk = neuPk; halter = false;
-    staende.clear(); beobachtet.clear(); auszahlung = umbuchung = null;
-    for (const b of ['#w-aus-bestaetigen', '#w-um-bestaetigen', '#w-auf-rechnung', '#w-exp-token']) $(b).classList.add('versteckt');
+    staende.clear(); beobachtet.clear(); zwecke.clear(); hervor.clear(); auszahlung = umbuchung = null;
+    for (const b of ['#w-aus-bestaetigen', '#w-um-bestaetigen', '#w-exp-token']) $(b).classList.add('versteckt');
     $('#w-exp-liste').replaceChildren();
+    versteckeRechnung();
+    versteckeBestaetigung();
     try { wallet = new CashuWallet({ sk, pubkey: pk, speicher: localStorageSpeicher() }); } catch (e) { wallet = null; meldung(text(e), 'warn'); }
     $('#w-nip07').classList.toggle('versteckt', !!sk);
     pruefeTab();
     geaendert();
+    pruefeMints();
   }
 
+  // --- Mints prüfen ---------------------------------------------------------------------------
+  // Beim Laden und danach alle 10 Minuten: kann jede Mint der Liste gerade alles (pruefeMint, mit
+  // Cache)? Mints, die nicht aufladen oder auszahlen können, sind in den Auswahlen ausgegraut, mit Grund.
+  // Eine nicht erreichbare Mint gilt als unbekannt (nicht ausgegraut) und wird nach einer Minute erneut geprüft.
+  async function pruefeMints() {
+    const w = wallet;
+    if (!w) return;
+    let neu = false;
+    await Promise.all(MINTS.map(async (m) => {
+      const alt = mintStatus.get(m.url);
+      if (alt && Date.now() < alt.zeit + (alt.unbekannt ? MINT_NOCHMAL : MINT_PRUEFEN)) return;
+      let st;
+      try {
+        const r = await w.pruefeMint(m.url, { neu: !!alt });
+        st = { aufladen: r.gesperrt.aufladen, auszahlen: r.gesperrt.auszahlen, alles: null };
+      } catch (e) {
+        st = e.unklar ? { unbekannt: e.message } : { alles: `nicht nutzbar (${e.message})` };
+      }
+      mintStatus.set(m.url, { ...st, zeit: Date.now() });
+      neu = true;
+    }));
+    if (neu && w === wallet) geaendert();
+  }
+  setInterval(pruefeMints, MINT_NOCHMAL);
+  // Grund, warum die Mint `was` ('aufladen', 'auszahlen' oder 'einsatz': beides) gerade nicht kann, sonst null
+  function mintGrund(url, was) {
+    const st = mintStatus.get(url);
+    if (!st) return null;
+    if (st.alles) return st.alles;
+    if (was === 'einsatz') return st.aufladen ?? st.auszahlen ?? null;
+    return st[was] ?? null;
+  }
+  const mintGruende = (url) => { const st = mintStatus.get(url); return st?.alles ? [st.alles] : [st?.aufladen, st?.auszahlen].filter(Boolean); };
+
   // Nach dem Laden (bzw. sobald dieser Tab die Wallet übernimmt): offene Vorgänge aller Mints fortsetzen,
-  // offene Aufladungen weiter beobachten, Stand der gesperrten Einsätze bei der Mint holen
+  // offene Aufladungen weiter beobachten (sie stehen unter „Offene Aufladungen“), Stand der gesperrten
+  // Einsätze bei der Mint holen
   function nachDemLaden() {
     if (!wallet || fortgesetzt === pk) return;
     fortgesetzt = pk;
@@ -239,10 +304,37 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
     w.fortsetzen().then((rs) => {
       if (w !== wallet) return;
       meldung(fortsetzenText(rs), rs.some((r) => r.fehler) ? 'warn' : '', rs.some((r) => r.fehler) ? 0 : 8000);
-      for (const m of MINTS) for (const a of w.offeneAufladungen(m.url)) { zeigeRechnung(m.url, a); beobachte(m.url, a.quote); }
+      for (const r of rs) if (r.art === 'aufladen' && r.ergebnis?.status === 'gutgeschrieben') gutschrift({ url: r.mint, betrag: r.ergebnis.betrag, wofuer: 'Aufladung' });
+      for (const m of MINTS) for (const a of w.offeneAufladungen(m.url)) beobachte(m.url, a.quote);
       geaendert();
       pruefeEinsaetze();
     });
+  }
+
+  // --- Bestätigung einer Gutschrift -------------------------------------------------------------
+  // Grüner Kasten mit Häkchen („+300 sat bei Minibits gutgeschrieben“, neues Guthaben der Mint
+  // hervorgehoben) und ein Toast oben auf der Seite, für Aufladen, Token, Umbuchen, Gewinne und
+  // Erstattungen. `wofuer`: kurzer Zusatz in Klammern.
+  let okZeit = null;
+  function gutschrift({ url, betrag, wofuer = null }) {
+    if (!wallet || !(betrag > 0)) return;
+    hervor.set(url, Date.now());
+    const satz = `+${betrag} sat bei ${mintName(url)} gutgeschrieben`;
+    const box = $('#w-ok');
+    box.replaceChildren(el('span', { class: 'haken', 'aria-hidden': 'true' }, '✓'),
+      el('div', { class: 'text' }, el('div', { class: 'titel' }, satz + (wofuer ? ` (${wofuer})` : '')),
+        el('div', {}, `Guthaben bei ${mintName(url)}: `, el('strong', { class: 'neu', 'data-mint': url }, `${wallet.guthaben(url)} sat`))),
+      el('button', { class: 'zu', title: 'Schließen', 'aria-label': 'Bestätigung schließen', onclick: versteckeBestaetigung }, '×'));
+    box.classList.remove('versteckt');
+    clearTimeout(okZeit);
+    okZeit = setTimeout(versteckeBestaetigung, BESTAETIGUNG_DAUER);
+    toast(`✓ ${satz}${wofuer ? ` (${wofuer})` : ''}`);
+    geaendert();
+  }
+  function versteckeBestaetigung() {
+    clearTimeout(okZeit);
+    $('#w-ok').classList.add('versteckt');
+    $('#w-ok').replaceChildren();
   }
   function fortsetzenText(rs) {
     if (!rs.length) return 'Wallet geprüft: keine offenen Vorgänge.';
@@ -260,10 +352,13 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
   }
 
   // --- Anzeige --------------------------------------------------------------------------------
+  // Auswahl → was die Mint dafür können muss (ohne Eintrag: nur Tausch)
+  const AUSWAHL = { '#w-auf-mint': 'aufladen', '#w-aus-mint': 'auszahlen', '#w-exp-mint': null, '#w-um-von': 'auszahlen', '#w-um-nach': 'aufladen' };
   function zeige() {
     zeigeMints();
-    for (const sel of ['#w-auf-mint', '#w-aus-mint', '#w-exp-mint', '#w-um-von', '#w-um-nach']) fuelleAuswahl($(sel));
+    for (const [sel, was] of Object.entries(AUSWAHL)) fuelleAuswahl($(sel), was);
     $('#w-auf-hinweis').classList.toggle('versteckt', !pk || ls.get(LS_HINWEIS + pk) === '1');
+    zeigeOffeneAufladungen();
     zeigeEinsaetze();
     $('#w-tab').classList.toggle('versteckt', !wallet || halter);
     sperren();
@@ -278,58 +373,137 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
     box.replaceChildren(...MINTS.map((m) => {
       const g = wallet?.guthaben(m.url) ?? 0;
       const vorgaenge = wallet?.offeneVorgaenge(m.url) ?? [];
+      const gruende = mintGruende(m.url);
+      const neu = Date.now() - (hervor.get(m.url) ?? 0) < HERVOR_DAUER;
+      const rest = !gruende.length || mintStatus.get(m.url)?.alles || !g ? ''
+        : mintGrund(m.url, 'auszahlen') ? ' Dein Guthaben bleibt hier sichtbar; Token exportieren geht weiter.'
+          : ' Dein Guthaben bleibt hier und lässt sich weiter auszahlen oder umbuchen.';
       return el('details', { class: 'mint', 'data-mint': m.url, open: g > 0 || offen.has(m.url) },
         el('summary', {}, el('span', { class: 'name' }, m.name), m.test ? el('span', { class: 'spielgeld' }, 'Spielgeld') : null,
-          el('span', { class: 'betrag' }, `${g} sat`)),
+          gruende.length ? el('span', { class: 'eingeschraenkt', title: gruende.join(', ') }, 'eingeschränkt') : null,
+          el('span', { class: `betrag${neu ? ' neu' : ''}` }, `${g} sat`)),
         el('div', { class: 'mono muted' }, m.url),
         m.test ? el('div', { class: 'muted' }, 'Test-Mint: kein echtes Geld.') : null,
+        gruende.length ? el('div', { class: 'warn mint-grund' }, `Kann gerade nicht alles: ${gruende.join(', ')}.${rest}`) : null,
         vorgaenge.length ? el('div', { class: 'muted' }, `Offene Vorgänge: ${vorgaenge.map((v) => v.zweck ?? v.art).join(', ')}`) : null);
     }));
   }
-  function fuelleAuswahl(sel) {
+  // Auswahl der Mints; mit `was` sind Mints ausgegraut, die das gerade nicht können (mit kurzem Grund)
+  function fuelleAuswahl(sel, was) {
     const vorher = sel.value;
-    sel.replaceChildren(...MINTS.map((m) => el('option', { value: m.url },
-      `${m.name}${m.test ? ' · Spielgeld' : ''} – ${wallet?.guthaben(m.url) ?? 0} sat`)));
-    sel.value = MINTS.some((m) => m.url === vorher) ? vorher : (MINTS.find((m) => m.url === MINT) ?? MINTS[0]).url;
+    const grund = (m) => (was ? mintGrund(m.url, was) : null);
+    sel.replaceChildren(...MINTS.map((m) => el('option', { value: m.url, disabled: !!grund(m) },
+      `${m.name}${m.test ? ' · Spielgeld' : ''} – ${wallet?.guthaben(m.url) ?? 0} sat${grund(m) ? ` · ${grund(m)}` : ''}`)));
+    const frei = MINTS.filter((m) => !grund(m));
+    sel.value = [vorher, MINT].find((u) => frei.some((m) => m.url === u)) ?? frei[0]?.url
+      ?? (MINTS.some((m) => m.url === vorher) ? vorher : (MINTS.find((m) => m.url === MINT) ?? MINTS[0]).url);
   }
 
   // --- Aufladen -------------------------------------------------------------------------------
+  // Im Kasten steht höchstens eine Rechnung (`angezeigt`). Sie verschwindet nach dem Zahlungseingang
+  // (dann die Bestätigung), wenn der Nutzer Mint oder Betrag ändert, und vor jeder neuen Rechnung.
+  // Offene Aufladungen bleiben gespeichert, werden weiter geprüft und stehen unter „Offene Aufladungen“.
+  const jetztS = () => Math.floor(Date.now() / 1000);
+  const istAbgelaufen = (a) => !!a?.ablauf && jetztS() > a.ablauf;
+  const alter = (s) => { const d = Math.max(0, jetztS() - s); return d < 60 ? `${d} s` : d < 3600 ? `${Math.floor(d / 60)} min` : d < 172800 ? `${Math.floor(d / 3600)} h` : `${Math.floor(d / 86400)} Tagen`; };
   function zeigeRechnung(url, q) {
+    angezeigt = { url, quote: q.quote, ablauf: q.ablauf ?? null, abgelaufen: false };
     $('#w-aufladen').open = true;
-    $('#w-auf-rechnung').classList.remove('versteckt');
-    $('#w-auf-rechnung').dataset.quote = q.quote;
-    $('#w-auf-qr').replaceChildren(qrSvg(`lightning:${q.rechnung}`, { gross: true }));
-    $('#w-auf-text').value = q.rechnung;
-    $('#w-auf-link').href = `lightning:${q.rechnung}`;
-    $('#w-auf-status').textContent = `Warte auf die Zahlung von ${q.betrag} sat an ${mintName(url)} …`;
+    const box = $('#w-auf-rechnung');
+    box.classList.remove('versteckt');
+    box.dataset.quote = q.quote;
+    $('#w-auf-daten').classList.remove('versteckt');
+    $('#w-auf-status').className = 'muted';
+    if (istAbgelaufen(q)) markiereAbgelaufen();
+    else {
+      $('#w-auf-qr').replaceChildren(qrSvg(`lightning:${q.rechnung}`, { gross: true }));
+      $('#w-auf-text').value = q.rechnung;
+      $('#w-auf-link').href = `lightning:${q.rechnung}`;
+      $('#w-auf-status').textContent = `Warte auf die Zahlung von ${q.betrag} sat an ${mintName(url)} …`
+        + (q.ablauf ? ` (gültig bis ${new Date(q.ablauf * 1000).toLocaleTimeString('de-DE', { timeStyle: 'short' })})` : '');
+    }
+    zeigeOffeneAufladungen();
   }
+  function leereRechnung() {
+    $('#w-auf-qr').replaceChildren();
+    $('#w-auf-text').value = '';
+    $('#w-auf-link').href = '#';
+  }
+  function versteckeRechnung() {
+    angezeigt = null;
+    const box = $('#w-auf-rechnung');
+    box.classList.add('versteckt');
+    delete box.dataset.quote;
+    leereRechnung();
+    $('#w-auf-status').textContent = '';
+    zeigeOffeneAufladungen();
+  }
+  // Abgelaufen: kein QR, kein Text, kein Link mehr, nur der Hinweis
+  function markiereAbgelaufen() {
+    if (!angezeigt) return;
+    angezeigt.abgelaufen = true;
+    leereRechnung();
+    $('#w-auf-daten').classList.add('versteckt');
+    $('#w-auf-status').className = 'hinweis warn';
+    $('#w-auf-status').textContent = 'Diese Rechnung ist abgelaufen, ohne bezahlt zu sein. Erzeuge bei Bedarf eine neue.';
+  }
+  // Liste der offenen Aufladungen aller Mints (ohne die angezeigte), neueste zuerst
+  function zeigeOffeneAufladungen() {
+    const alle = wallet ? MINTS.flatMap((m) => wallet.offeneAufladungen(m.url).map((a) => ({ ...a, url: m.url }))) : [];
+    const liste = alle.filter((a) => a.quote !== angezeigt?.quote).sort((a, b) => (b.erstellt ?? 0) - (a.erstellt ?? 0));
+    $('#w-auf-offen-box').classList.toggle('versteckt', !liste.length);
+    $('#w-auf-offen').replaceChildren(...liste.map((a) => {
+      const ab = istAbgelaufen(a);
+      return el('li', { 'data-quote': a.quote, class: ab ? 'abgelaufen' : null },
+        el('span', {}, `${mintName(a.url)} · ${a.betrag} sat${a.erstellt ? ` · vor ${alter(a.erstellt)}` : ''}`,
+          ab ? el('span', { class: 'warn' }, ' · abgelaufen') : null),
+        ab ? null : el('button', { onclick: () => {
+          $('#w-auf-mint').value = a.url; $('#w-auf-betrag').value = String(a.betrag);
+          versteckeBestaetigung();
+          zeigeRechnung(a.url, a);
+          beobachte(a.url, a.quote);
+        } }, 'Rechnung zeigen'));
+    }));
+  }
+  setInterval(() => {
+    if (angezeigt && !angezeigt.abgelaufen && istAbgelaufen(angezeigt)) markiereAbgelaufen();
+    zeigeOffeneAufladungen(); // Alter und „abgelaufen“
+  }, 5000);
+  // Mint oder Betrag geändert: Rechnung aus der Anzeige nehmen (die Aufladung bleibt offen und geprüft)
+  const nachAenderung = () => { if (angezeigt) versteckeRechnung(); };
+  $('#w-auf-mint').addEventListener('change', nachAenderung);
+  $('#w-auf-betrag').addEventListener('input', nachAenderung);
+
   // Fragt alle 3 s nach, bis die Rechnung bezahlt (dann gutgeschrieben) oder abgelaufen ist
   async function beobachte(url, quote) {
     if (beobachtet.has(quote)) return;
     beobachtet.add(quote);
     const w = wallet;
-    const zuMir = () => $('#w-auf-rechnung').dataset.quote === quote;
+    const zuMir = () => angezeigt?.quote === quote;
+    const status = (t) => { if (zuMir() && !angezeigt.abgelaufen) $('#w-auf-status').textContent = t; };
     try {
       for (;;) {
         if (w !== wallet || !beobachtet.has(quote)) return;
         if (halter) {
           let r;
           try { r = await w.pruefeAufladung(url, quote); } catch (e) {
-            if (e.unklar) { if (zuMir()) $('#w-auf-status').textContent = `Mint gerade nicht erreichbar, versuche es weiter … (${e.message})`; await pause(AUFLADEN_TAKT * 3); continue; }
-            if (/Keine offene Aufladung/.test(e.message)) return geaendert(); // schon erledigt (z. B. fortsetzen)
+            if (e.unklar) { status(`Mint gerade nicht erreichbar, versuche es weiter … (${e.message})`); await pause(AUFLADEN_TAKT * 3); continue; }
+            if (/Keine offene Aufladung/.test(e.message)) { if (zuMir()) versteckeRechnung(); return geaendert(); } // schon erledigt (z. B. fortsetzen)
             throw e;
           }
+          if (w !== wallet) return;
           if (r.status === 'gutgeschrieben') {
             ls.set(LS_HINWEIS + pk, '1');
-            if (zuMir()) $('#w-auf-status').textContent = `Bezahlt: ${r.betrag} sat gutgeschrieben.`;
-            meldung(`Aufladung: ${r.betrag} sat bei ${mintName(url)} gutgeschrieben.`, 'ok', 10000);
+            if (zuMir()) versteckeRechnung();
+            gutschrift({ url, betrag: r.betrag, wofuer: zwecke.get(quote) ?? 'Aufladung' });
+            zwecke.delete(quote);
             return geaendert();
           }
           if (r.status === 'abgelaufen') {
-            if (zuMir()) $('#w-auf-status').textContent = 'Die Rechnung ist abgelaufen, ohne bezahlt zu sein.';
+            if (zuMir()) markiereAbgelaufen();
             return geaendert();
           }
-          if (zuMir()) $('#w-auf-status').textContent = `Warte auf die Zahlung von ${r.betrag} sat an ${mintName(url)} … (zuletzt geprüft ${new Date().toLocaleTimeString('de-DE')})`;
+          status(`Warte auf die Zahlung von ${r.betrag} sat an ${mintName(url)} … (zuletzt geprüft ${new Date().toLocaleTimeString('de-DE')})`);
         }
         await pause(AUFLADEN_TAKT);
       }
@@ -338,10 +512,19 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
     } finally { beobachtet.delete(quote); }
   }
   $('#w-auf-los').onclick = () => aktion(async () => {
+    // Vorher alles weg: Schlägt die neue Rechnung fehl, steht nur die Fehlermeldung da
+    versteckeRechnung();
+    versteckeBestaetigung();
+    meldung('');
     const url = $('#w-auf-mint').value, betrag = zahl('#w-auf-betrag');
     if (!betrag) throw new Error('Bitte einen Betrag in sat eingeben.');
-    const q = await wallet.aufladen(url, betrag);
-    zeigeRechnung(url, q);
+    let q;
+    try { q = await wallet.aufladen(url, betrag); } catch (e) {
+      if (e.mint) { mintStatus.delete(url); pruefeMints(); } // Stand der Mint neu holen (z. B. Aufladen abgeschaltet)
+      throw e;
+    }
+    // Inzwischen Mint oder Betrag geändert: nur in die Liste der offenen Aufladungen
+    if ($('#w-auf-mint').value === url && zahl('#w-auf-betrag') === betrag) zeigeRechnung(url, q);
     beobachte(url, q.quote);
   });
   $('#w-auf-kopieren').onclick = async () => {
@@ -355,6 +538,7 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
     const r = await wallet.empfange(t);
     $('#w-ein-text').value = '';
     meldung(`Token eingelöst: ${r.betrag} sat bei ${mintName(r.mint)}${r.gebuehr ? ` (Gebühr der Mint ${r.gebuehr} sat)` : ''}.`, 'ok');
+    gutschrift({ url: r.mint, betrag: r.betrag, wofuer: 'Token' });
   });
 
   // --- Auszahlen ------------------------------------------------------------------------------
@@ -371,7 +555,8 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
       v = await wallet.auszahlungVorbereiten(url, { adresse: ziel, betrag });
     } else v = await wallet.auszahlungVorbereiten(url, { rechnung: ziel.replace(/^lightning:/i, '') });
     auszahlung = { url, v };
-    $('#w-aus-info').textContent = `Auszahlen von ${mintName(url)}: ${v.betrag} sat${ziel.includes('@') ? ` an ${ziel}` : ''}. ${gebuehrText(v)}`;
+    $('#w-aus-info').textContent = `Auszahlen von ${mintName(url)}: ${v.betrag} sat${ziel.includes('@') ? ` an ${ziel}` : ''}. `
+      + (v.beschreibung ? `Beschreibung der Rechnung: „${v.beschreibung}“. ` : '') + gebuehrText(v);
     $('#w-aus-bestaetigen').classList.remove('versteckt');
   });
   $('#w-aus-abbrechen').onclick = () => { auszahlung = null; $('#w-aus-bestaetigen').classList.add('versteckt'); };
@@ -437,6 +622,7 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
     const r = await wallet.auszahlen(von, v);
     if (r.status !== 'bezahlt') { meldung('Die Mint bezahlt noch. Die Gutschrift folgt, sobald die Zahlung durch ist.', 'warn'); }
     else meldung(`Umgebucht: ${r.betrag} sat von ${mintName(von)} bezahlt (Gebühr ${r.gebuehr} sat), Gutschrift bei ${mintName(nach)} folgt …`, 'ok');
+    zwecke.set(q.quote, `Umbuchung von ${mintName(von)}`);
     beobachte(nach, q.quote);
   });
 
@@ -477,6 +663,7 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
     return aktion(async () => {
       const r = await wallet.holeZurueck(url, g);
       meldung(`Einsatz der Partie ${g.slice(0, 6)} zurückgeholt: ${r.betrag} sat (nach Gebühr der Mint).`, 'ok');
+      gutschrift({ url, betrag: r.betrag, wofuer: `Einsatz der Partie ${g.slice(0, 6)} zurückgeholt` });
     });
   }
 
@@ -552,9 +739,14 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
     vorWechsel,
     holeZurueck,
     meldung,
+    gutschrift,
+    mintGrund,
     aktualisiere: geaendert,
     pruefeEinsaetze,
-    zeigeAufladen: (url, betrag) => zeigeBereich('#w-aufladen', () => { $('#w-auf-mint').value = url; if (betrag) $('#w-auf-betrag').value = betrag; }),
+    zeigeAufladen: (url, betrag) => zeigeBereich('#w-aufladen', () => {
+      if (angezeigt && (angezeigt.url !== url || (betrag && zahl('#w-auf-betrag') !== betrag))) versteckeRechnung();
+      $('#w-auf-mint').value = url; if (betrag) $('#w-auf-betrag').value = betrag;
+    }),
     zeigeUmbuchen: (nach, betrag) => zeigeBereich('#w-umbuchen', () => {
       $('#w-um-nach').value = nach;
       const von = MINTS.filter((m) => m.url !== nach).sort((a, b) => wallet.guthaben(b.url) - wallet.guthaben(a.url))[0];

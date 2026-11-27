@@ -34,13 +34,13 @@
   // Vertrauenswürdige Mints für Einsätze (E9), URL ohne Schrägstrich am Ende. Geprüft am 26.11.2026
   // per /v1/info: NUT-04/05 (bolt11, sat), NUT-07, NUT-11, NUT-12, CORS für alle Origins. Ob sie
   // SIG_ALL wirklich annehmen, steht nicht in /v1/info. Ein `create` mit einer anderen Mint ist
-  // ungültig. `MINT` ist die Vorgabe (Test-Mint, bis M4 erreicht ist).
+  // ungültig. `MINT` ist die Vorgabe (Test-Mint, bis M4 erreicht ist). LN Voltz (mint.lnvoltz.com)
+  // ist seit #43 nicht mehr dabei: Dort ist NUT-04 (Aufladen) abgeschaltet.
   const MINTS = [
     { url: 'https://testnut.cashu.space', name: 'Test-Mint (Spielgeld)', test: true },
     { url: 'https://mint.minibits.cash/Bitcoin', name: 'Minibits' },
     { url: 'https://mint.coinos.io', name: 'Coinos' },
     { url: 'https://mint.cubabitcoin.org', name: 'Cuba Bitcoin' },
-    { url: 'https://mint.lnvoltz.com', name: 'LN Voltz' },
   ].map(Object.freeze);
   const MINT = 'https://testnut.cashu.space';
 

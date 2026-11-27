@@ -47,7 +47,8 @@
   ul.partien { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   ul.partien li { display: flex; justify-content: space-between; align-items: center; gap: 8px;
                   padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
-  #brett { width: min(100%, 560px); aspect-ratio: 1; display: grid; margin: 0 auto;
+  #brett-rahmen { position: relative; width: min(100%, 560px); margin: 6px auto 0; }
+  #brett { width: 100%; aspect-ratio: 1; display: grid;
            grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); border-radius: 6px; overflow: hidden;
            box-shadow: 0 2px 10px rgba(0,0,0,.2); user-select: none; }
   .feld { position: relative; cursor: pointer; min-width: 0; min-height: 0; }
@@ -57,6 +58,34 @@
   .feld.ziel::after { content: ""; position: absolute; width: 28%; height: 28%; border-radius: 50%;
                       background: var(--markiert); }
   .feld.schach { box-shadow: inset 0 0 0 4px var(--warn); }
+  /* Nach dem Ende: Matt-Feld (Ziel des letzten Zugs) und König des Verlierers */
+  .feld.matt-feld::before { content: ""; position: absolute; inset: 0; background: rgba(192, 57, 43, .45); }
+  .feld.verlierer-koenig { box-shadow: inset 0 0 0 5px var(--warn); }
+  .feld.verlierer-koenig::before { content: ""; position: absolute; inset: 0;
+                                   background: radial-gradient(rgba(192, 57, 43, .75), rgba(192, 57, 43, 0) 70%); }
+  /* Geschlagene Figuren je Spieler und Materialvorsprung */
+  .spieler-zeile { justify-content: space-between; flex-wrap: nowrap; max-width: 560px; margin-left: auto; margin-right: auto; }
+  .spieler-zeile > span:first-child { flex: none; }
+  .geschlagen { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; min-height: 20px; }
+  .geschlagen .gruppe { display: inline-flex; margin-right: 6px; }
+  .geschlagen.cg-wrap piece { position: static; display: inline-block; width: 20px; height: 20px; margin-right: -7px;
+                              background-size: contain; background-repeat: no-repeat; }
+  .geschlagen.cg-wrap .gruppe piece:last-child { margin-right: 0; }
+  .geschlagen .vorsprung { margin-left: 10px; font-weight: 600; font-size: 13px; color: var(--muted); }
+  /* Ergebnis-Kasten über dem Brett */
+  #ergebnis { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5;
+              width: min(90%, 400px); padding: 16px 18px 14px; border-radius: 12px; text-align: center;
+              background: var(--card); color: var(--fg); border: 3px solid var(--line);
+              box-shadow: 0 8px 30px rgba(0, 0, 0, .35); display: grid; gap: 6px; }
+  #ergebnis.gewonnen { border-color: var(--ok); }
+  #ergebnis.verloren { border-color: var(--warn); }
+  #ergebnis-titel { font-size: 19px; font-weight: 700; padding: 0 18px; }
+  #ergebnis.gewonnen #ergebnis-titel { color: var(--ok); }
+  #ergebnis.verloren #ergebnis-titel { color: var(--warn); }
+  #ergebnis-zu { position: absolute; right: 6px; top: 6px; border: none; background: none; font-size: 20px;
+                 line-height: 1; padding: 4px 8px; color: var(--muted); }
+  #ergebnis-geld { font-size: 15px; display: grid; gap: 2px; }
+  #ergebnis-geld .betrag { font-weight: 700; font-size: 17px; }
   .cg-wrap piece { position: absolute; inset: 4%; z-index: 1; display: block;
                    background-size: contain; background-repeat: no-repeat; background-position: center; }
   .koord { position: absolute; font-size: 10px; opacity: .7; z-index: 1; color: #000; }
@@ -81,16 +110,39 @@
   textarea.mono { resize: vertical; }
   .hinweis.ok { border: 1px solid var(--ok); color: var(--ok); }
   /* Wallet (wallet-ui.js) und Einsatz (einsatz.js) */
+  aside > * { min-width: 0; }
+  #wallet select { width: 100%; min-width: 0; text-overflow: ellipsis; }
   #wallet details { border-top: 1px solid var(--line); padding: 6px 0; }
   #wallet summary { cursor: pointer; font-weight: 600; font-size: 14px; }
   #wallet details > :not(summary) { margin-top: 6px; }
   #wallet .mints details.mint summary { display: flex; gap: 6px; align-items: center; font-weight: 400; }
-  #wallet .mint .betrag { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #wallet .mint .betrag { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .spielgeld { font-size: 11px; font-weight: 700; color: #fff; background: var(--dunkel); border-radius: 5px; padding: 0 5px; }
   .qr svg { width: min(100%, 220px); display: block; margin: 0 auto; border-radius: 6px; }
   ul.liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
   ul.liste li { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
   .warn { color: var(--warn); }
+  .eingeschraenkt { font-size: 11px; font-weight: 700; color: var(--warn); border: 1px solid var(--warn); border-radius: 5px; padding: 0 5px; }
+  .mint-grund { font-size: 13px; }
+  ul.liste li.abgelaufen { color: var(--muted); }
+  /* Bestätigung einer Gutschrift (wallet-ui.js) und Toast oben auf der Seite */
+  .bestaetigung { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; margin: 6px 0;
+                  border: 1px solid var(--ok); border-radius: 8px; background: color-mix(in srgb, var(--ok) 12%, var(--card)); }
+  .bestaetigung .haken { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--ok); color: #fff;
+                         display: grid; place-items: center; font-weight: 700; }
+  .bestaetigung .text { flex: 1; }
+  .bestaetigung .titel { font-weight: 700; color: var(--ok); }
+  .bestaetigung .zu { padding: 0 7px; line-height: 1.4; }
+  @keyframes aufleuchten { 0% { transform: scale(1); background: transparent; } 30% { transform: scale(1.18); background: color-mix(in srgb, var(--ok) 35%, transparent); } 100% { transform: scale(1); background: transparent; } }
+  .bestaetigung .neu, #wallet .mint .betrag.neu { display: inline-block; color: var(--ok); border-radius: 5px; padding: 0 3px; animation: aufleuchten 1.2s ease-out 2; }
+  #toasts { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1000; display: grid; gap: 6px;
+            width: min(92vw, 420px); pointer-events: none; }
+  .toast { background: var(--ok); color: #fff; font-weight: 600; padding: 10px 14px; border-radius: 9px;
+           box-shadow: 0 4px 16px rgba(0,0,0,.25); transition: opacity .4s, transform .4s; animation: einblenden .3s ease-out; }
+  .toast.warn { background: var(--warn); }
+  .toast.weg { opacity: 0; transform: translateY(-8px); }
+  @keyframes einblenden { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .toast, .bestaetigung .neu, #wallet .mint .betrag.neu { animation: none; transition: none; } }
   #einsatz-info { margin: 8px auto 0; max-width: 560px; display: grid; gap: 4px; font-size: 14px; }
   #einsatz-info .einsatz-kopf, #einsatz-info .geld-ergebnis { font-weight: 600; }
   dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); max-width: 460px; }
@@ -150,15 +202,34 @@
 
     <!-- Partie -->
     <div id="partie" class="karte versteckt">
-      <div class="reihe" style="justify-content:space-between">
-        <span id="gegner-oben" class="muted"></span>
+      <div class="reihe" style="justify-content:center">
         <span class="muted mono" id="partie-id"></span>
-        <span id="uhr-oben" class="uhr"></span>
       </div>
       <div id="schiri-kopf" class="muted"></div>
-      <div id="brett" class="cg-wrap" style="margin-top:8px"></div>
-      <div class="reihe" style="justify-content:space-between; margin-top:6px">
+      <div class="reihe spieler-zeile" style="margin-top:6px">
+        <span id="gegner-oben" class="muted"></span>
+        <span id="geschlagen-oben" class="geschlagen cg-wrap"></span>
+        <span id="uhr-oben" class="uhr"></span>
+      </div>
+      <div id="brett-rahmen">
+        <div id="brett" class="cg-wrap"></div>
+        <!-- Ergebnis-Kasten bei Ende der Partie (schließbar) -->
+        <div id="ergebnis" class="versteckt" role="dialog" aria-labelledby="ergebnis-titel">
+          <button id="ergebnis-zu" title="Schließen" aria-label="Schließen">×</button>
+          <div id="ergebnis-titel"></div>
+          <div id="ergebnis-text"></div>
+          <div id="ergebnis-schiri" class="muted"></div>
+          <div id="ergebnis-abweichung" class="hinweis warn versteckt"></div>
+          <div id="ergebnis-geld" class="versteckt"></div>
+          <div class="reihe" style="justify-content:center; margin-top:10px">
+            <button id="ergebnis-neu" class="primaer">Neue Partie</button>
+            <button id="ergebnis-lobby">Zur Lobby</button>
+          </div>
+        </div>
+      </div>
+      <div class="reihe spieler-zeile" style="margin-top:6px">
         <span id="gegner-unten" class="muted"></span>
+        <span id="geschlagen-unten" class="geschlagen cg-wrap"></span>
         <span id="uhr-unten" class="uhr"></span>
       </div>
       <div id="status"></div>
@@ -208,13 +279,13 @@
 </main>
 
 <!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
-<footer>Nostr-Schach <span id="version">v0.1.13</span></footer>
+<footer>Nostr-Schach <span id="version">v0.1.16</span></footer>
 
 <script type="module">
 import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19 } from 'nostr-tools';
 import { Chess } from 'chess.js';
 import { KIND, KIND_ACK, KIND_LEBENSZEICHEN, TAG, ZEITKONTROLLE, ABBRUCH_NACH, gueltigeId, partieVon, lies, baue as baueAus } from './regeln.js';
-import { starteWallet, frage, mintText } from './wallet-ui.js';
+import { starteWallet, frage, mintText, el } from './wallet-ui.js';
 import { starteEinsatz } from './einsatz.js';
 
 // Protokoll und Regeln stehen in regeln.js, Relays, Import-Map und Standard-Schiri in einstellungen.js.
@@ -241,7 +312,7 @@ const ls = {
 // --- Wallet und Einsatz ----------------------------------------------------
 // Wallet-Kasten (wallet-ui.js) und Ablauf der Einsatz-Partien (einsatz.js). Beide bekommen nur, was
 // sie brauchen; Identität, Events und Senden bleiben hier.
-const W = starteWallet({ kasten: $('#wallet'), aufAenderung: () => { zeigeEinsatzWahl(); if (aktuell) zeichne(); } });
+const W = starteWallet({ kasten: $('#wallet'), aufAenderung: () => { zeigeEinsatzWahl(); planeNeuzeichnen(); } });
 const E = starteEinsatz({
   W, baue, jetzt, pk: () => pk,
   // Einsatz und Antrag signiert die Seite mit dem eigenen Schlüssel (mit NIP-07 gibt es keine Einsätze)
@@ -463,7 +534,7 @@ function zeigeLobby() {
   offen.sort((a, b) => b.letzte - a.letzte); mein.sort((a, b) => b.letzte - a.letzte);
   liste('#offen', offen.slice(0, 15), 'Gerade keine offenen Partien – leg doch eine an.', (p) => {
     const farbe = p.create.c.farbe === 'w' ? 'Schwarz' : 'Weiß';
-    return [`${kurz(p.create.pubkey)} sucht Gegner · du spielst ${farbe}${einsatzText(p)} · ${schiriText(p)}`, 'Ansehen'];
+    return [`${kurz(p.create.pubkey)} sucht Gegner · du spielst ${farbe}${einsatzText(p)} · ${schiriText(p)}`, 'Ansehen', mintHinweis(p)];
   });
   liste('#meine', mein.slice(0, 15), 'Noch keine.', (p) => {
     if (p.nurId) return [`Partie ${p.g} (lädt …)`, 'Öffnen'];
@@ -480,14 +551,18 @@ const schiriText = (p) => !p.schiri ? 'ohne Schiri'
   : `Schiri ${kurz(p.schiri)}${p.schiri === SCHIRI ? '' : ' (nicht der Standard-Schiri)'}`;
 const einsatzText = (p) => !p.einsatz ? ''
   : ` · Einsatz ${p.einsatz.betrag} sat bei ${mintText(p.einsatz.mint)}`;
+// Kann die Mint einer Einsatz-Partie gerade nicht alles (Stand aus der Prüfung des Wallet-Kastens,
+// die Lobby fragt dafür keine Mint an), ein Hinweis
+const mintHinweis = (p) => { const g = p.einsatz && W.mintGrund(p.einsatz.mint, 'einsatz'); return g ? `Hinweis: ${mintText(p.einsatz.mint)} kann gerade nicht alles (${g})` : null; };
 
 function liste(sel, eintraege, leer, text) {
   const ul = $(sel); ul.innerHTML = '';
   if (!eintraege.length) { ul.innerHTML = `<li class="muted"></li>`; ul.firstChild.textContent = leer; return; }
   for (const p of eintraege) {
-    const [t, knopf] = text(p);
+    const [t, knopf, hinweis] = text(p);
     const li = document.createElement('li');
     const span = document.createElement('span'); span.textContent = t; span.className = 'muted';
+    if (hinweis) span.append(el('span', { class: 'warn mint-hinweis' }, ` · ${hinweis}`));
     const b = document.createElement('button'); b.textContent = knopf; b.onclick = () => { location.hash = p.g; };
     li.append(span, b); ul.append(li);
   }
@@ -530,16 +605,18 @@ function zeigeEinsatzWahl() {
   $('#einsatz-mint-reihe').classList.toggle('versteckt', !betrag);
   $('#einsatz-hinweis').classList.toggle('versteckt', !betrag);
   if (!betrag) { $('#einsatz-guthaben').classList.add('versteckt'); return zeigeSchiriStatus(); }
+  // Ausgegraut: zu wenig Guthaben oder die Mint kann gerade nicht alles (W.mintGrund, mit Grund)
   const sel = $('#einsatz-mint'), vorher = sel.value;
   sel.replaceChildren(...MINTS.map((m) => {
-    const g = W.guthaben(m.url), o = document.createElement('option');
-    o.value = m.url; o.disabled = g < betrag;
-    o.textContent = `${mintText(m.url)} – ${g} sat${g < betrag ? ' · Guthaben zu klein' : ''}`;
+    const g = W.guthaben(m.url), grund = W.mintGrund(m.url, 'einsatz'), o = document.createElement('option');
+    o.value = m.url; o.disabled = g < betrag || !!grund;
+    o.textContent = `${mintText(m.url)} – ${g} sat${grund ? ` · ${grund}` : g < betrag ? ' · Guthaben zu klein' : ''}`;
     return o;
   }));
-  const moeglich = MINTS.filter((m) => W.guthaben(m.url) >= betrag);
-  sel.value = moeglich.some((m) => m.url === vorher) ? vorher : (moeglich.find((m) => m.url === MINT) ?? moeglich[0] ?? MINTS.find((m) => m.url === MINT) ?? MINTS[0]).url;
-  if (!moeglich.length) einsatzGuthabenHinweis(`Für ${betrag} sat Einsatz reicht das Guthaben bei keiner Mint.`, sel.value, betrag);
+  const nutzbar = MINTS.filter((m) => !W.mintGrund(m.url, 'einsatz'));
+  const moeglich = nutzbar.filter((m) => W.guthaben(m.url) >= betrag);
+  sel.value = moeglich.some((m) => m.url === vorher) ? vorher : (moeglich.find((m) => m.url === MINT) ?? moeglich[0] ?? nutzbar.find((m) => m.url === MINT) ?? nutzbar[0] ?? MINTS[0]).url;
+  if (!moeglich.length) einsatzGuthabenHinweis(`Für ${betrag} sat Einsatz reicht das Guthaben bei keiner Mint${nutzbar.length < MINTS.length ? ', die gerade alles kann' : ''}.`, sel.value, betrag);
   else if (!$('#einsatz-guthaben').dataset.fest) $('#einsatz-guthaben').classList.add('versteckt');
   $('#einsatz-hinweis').textContent = `Schiri ${kurz(SCHIRI)} leitet die Partie. Er hält kein Geld, er gibt am Ende nur frei: `
     + `Beide Einsätze sind bis zum Ende 2 von 3 gesperrt (Weiß, Schwarz, Schiri) und lassen sich spätestens nach 24 h `
@@ -601,7 +678,11 @@ function oeffne(g) {
   $('#partie').classList.toggle('versteckt', !aktuell);
   $('#zuege-karte').classList.toggle('versteckt', !aktuell);
   $('#sende-info').textContent = '';
-  if (!aktuell) { zeigeSchiriStatus(); return zeigeLobby(); }
+  if (!aktuell) {
+    zeigeSchiriStatus(); zeigeLobby();
+    if (anlegenZeigen) { anlegenZeigen = false; $('#lobby').scrollIntoView({ block: 'start' }); $('[data-farbe="w"]').focus(); }
+    return;
+  }
   $('#partie-id').textContent = 'Partie ' + aktuell;
   abonnierePartie();
   zeichne();
@@ -651,6 +732,7 @@ setInterval(() => {
   if (stand(p) !== gezeichnet) return zeichne();
   zeigeUhren(p, p?.spieler.b === pk && p?.spieler.w !== pk ? 'b' : 'w');
   E.zeichne($('#einsatz-info'), p); // Zahlfrist und Stand des Einlösens
+  E.zeichneKasten($('#ergebnis-geld'), p); // Geld im Ergebnis-Kasten, live
 }, 1000);
 
 function zeichne() {
@@ -659,6 +741,8 @@ function zeichne() {
   const brett = $('#brett');
   if (!p) {
     brett.innerHTML = ''; $('#status').textContent = 'Lade Partie von den Relays …';
+    $('#geschlagen-oben').replaceChildren(); $('#geschlagen-unten').replaceChildren();
+    zeigeErgebnis(null);
     $('#btn-beitreten').classList.add('versteckt'); $('#btn-aufgeben').disabled = true;
     $('#gegner-oben').textContent = $('#gegner-unten').textContent = ''; $('#zuege').textContent = '';
     $('#abweichung').classList.add('versteckt');
@@ -731,7 +815,9 @@ function zeichne() {
   const dateien = 'abcdefgh';
   const zeilen = unten === 'w' ? [8, 7, 6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6, 7, 8];
   const spalten = unten === 'w' ? [...dateien] : [...dateien].reverse();
-  const figurName = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
+  // Nach dem Ende: König des Verlierers und bei Matt das Feld des letzten Zugs hervorheben
+  const verliererKoenig = p.ende?.verlierer && brettStand.findPiece({ type: 'k', color: p.ende.verlierer })[0];
+  const mattFeld = p.ende?.art === 'matt' ? letzter?.to : null;
   brett.innerHTML = '';
   zeilen.forEach((r, ri) => spalten.forEach((f, fi) => {
     const feld = f + r;
@@ -741,11 +827,13 @@ function zeichne() {
     if (letzter && (letzter.from === feld || letzter.to === feld)) div.classList.add('letzter');
     if (gewaehlt === feld) div.classList.add('gewaehlt');
     if (ziele.includes(feld)) div.classList.add('ziel');
+    if (feld === mattFeld) div.classList.add('matt-feld');
+    if (feld === verliererKoenig) div.classList.add('verlierer-koenig');
     const fig = brettStand.get(feld);
     if (fig) {
       if (fig.type === 'k' && brettStand.inCheck() && fig.color === brettStand.turn()) div.classList.add('schach');
       const el = document.createElement('piece');
-      el.className = figurName[fig.type] + (fig.color === 'w' ? ' white' : ' black');
+      el.className = FIGUR[fig.type] + (fig.color === 'w' ? ' white' : ' black');
       div.append(el);
     }
     if (fi === 0) div.insertAdjacentHTML('beforeend', `<span class="koord r">${r}</span>`);
@@ -764,7 +852,102 @@ function zeichne() {
   p.zuege.forEach((z, i) => eintrag(i, z.san, 'bestaetigt', p.schiri ? ' ✓' : '', 'vom Schiri bestätigt'));
   if (offen) eintrag(p.zuege.length, offen.san, 'wartet', ' (wartet auf Bestätigung)', 'Der Schiri hat diesen Zug noch nicht bestätigt');
   if (!p.zuege.length && !offen) zl.textContent = 'Noch keine Züge.';
+
+  // Geschlagene Figuren je Spieler (mit dem Zug, der noch auf den ack wartet, wie auf dem Brett)
+  const m = material(offen ? [...p.zuege, offen] : p.zuege, brettStand);
+  zeigeGeschlagen('#geschlagen-oben', oben, m);
+  zeigeGeschlagen('#geschlagen-unten', unten, m);
+  zeigeErgebnis(p, meineFarbe);
 }
+
+// --- Geschlagene Figuren und Materialvorsprung -------------------------------------------------
+const FIGUR = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
+const FIGUR_DE = { q: 'Dame', r: 'Turm', b: 'Läufer', n: 'Springer', p: 'Bauer' };
+const WERT = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+const REIHENFOLGE = 'pnbrq'; // nach Wert, Bauern zuerst
+// Was jede Farbe geschlagen hat, aus der Zugliste; der Vorsprung aus dem Material auf dem Brett,
+// so zählt eine Umwandlung mit (aus dem Bauern wird eine Dame, geschlagen ist dabei nichts)
+function material(zuege, brett) {
+  const geschlagen = { w: [], b: [] };
+  for (const z of zuege) if (z.captured) geschlagen[z.color].push(z.captured);
+  for (const f of ['w', 'b']) geschlagen[f].sort((a, b) => REIHENFOLGE.indexOf(a) - REIHENFOLGE.indexOf(b));
+  let summe = 0;
+  for (const reihe of brett.board()) for (const fig of reihe) if (fig) summe += (fig.color === 'w' ? 1 : -1) * (WERT[fig.type] ?? 0);
+  return { geschlagen, vorsprung: { w: Math.max(0, summe), b: Math.max(0, -summe) } };
+}
+// Figuren, die `farbe` geschlagen hat (also die des Gegners), gleiche Art zusammen, dazu „+n“
+function zeigeGeschlagen(sel, farbe, m) {
+  const ziel = $(sel), liste = m.geschlagen[farbe], gegner = farbe === 'w' ? 'black' : 'white';
+  ziel.replaceChildren();
+  let gruppe = null;
+  liste.forEach((t, i) => {
+    if (t !== liste[i - 1]) { gruppe = document.createElement('span'); gruppe.className = 'gruppe'; ziel.append(gruppe); }
+    const el = document.createElement('piece');
+    el.className = `${FIGUR[t]} ${gegner}`; el.title = FIGUR_DE[t];
+    gruppe.append(el);
+  });
+  if (m.vorsprung[farbe]) {
+    const v = document.createElement('span'); v.className = 'vorsprung'; v.textContent = `+${m.vorsprung[farbe]}`;
+    v.title = 'Materialvorsprung'; ziel.append(v);
+  }
+  ziel.dataset.figuren = liste.join('');
+  ziel.title = liste.length ? `${FARBE[farbe]} hat geschlagen: ${liste.map((t) => FIGUR_DE[t]).join(', ')}` : '';
+}
+
+// --- Ergebnis-Kasten ---------------------------------------------------------------------------
+// Bei Ende der Partie über dem Brett; schließbar. Geschlossen bleibt er für dieses Ende (ein neues
+// ergebnis des Schiris öffnet ihn wieder). Geld in Einsatz-Partien zeichnet einsatz.js hinein.
+const kastenZu = new Set();
+const kastenSchluessel = (p) => `${p.g}|${p.ergebnis?.id ?? ''}|${p.ende.art}|${p.ende.verlierer ?? ''}`;
+const GRUND_KASTEN = { matt: 'Schachmatt', aufgabe: 'Aufgabe', zeit: 'Zeit überschritten', doppelzug: 'Doppelzug' };
+function remisGrund(chess) {
+  if (chess.isStalemate()) return 'Patt';
+  if (chess.isThreefoldRepetition()) return 'dreifache Wiederholung';
+  if (chess.isInsufficientMaterial()) return 'zu wenig Material';
+  if (chess.isDrawByFiftyMoves()) return '50-Züge-Regel';
+  return null;
+}
+// Titel und Ausgang (gewonnen, verloren, neutral) aus der Sicht von `ich` (Farbe, null: Zuschauer)
+function ergebnisTitel(e, ich, chess) {
+  const gewinner = e.verlierer === 'w' ? 'b' : 'w';
+  switch (e.art) {
+    case 'matt': case 'aufgabe': case 'zeit': case 'doppelzug':
+      if (!ich) return { titel: `${FARBE[gewinner]} gewinnt – ${GRUND_KASTEN[e.art]}`, art: 'neutral' };
+      return ich === gewinner ? { titel: `Du hast gewonnen – ${GRUND_KASTEN[e.art]}`, art: 'gewonnen' }
+        : { titel: `Du hast verloren – ${GRUND_KASTEN[e.art]}`, art: 'verloren' };
+    case 'remis': { const g = remisGrund(chess); return { titel: g ? `Remis – ${g}` : 'Remis', art: 'neutral' }; }
+    case 'abbruch': return { titel: `Partie abgebrochen – kein erster Zug in ${ABBRUCH_NACH} s`, art: 'neutral' };
+    case 'annulliert': return { titel: 'Partie annulliert', art: 'neutral' };
+    case 'nicht-bezahlt': return { art: 'neutral', titel: 'Nicht bezahlt – ' + (!e.verlierer ? 'keiner hat den Einsatz bezahlt'
+      : e.verlierer === ich ? 'du hast den Einsatz nicht rechtzeitig bezahlt'
+        : ich ? 'dein Gegner hat den Einsatz nicht bezahlt' : `${FARBE[e.verlierer]} hat den Einsatz nicht bezahlt`) };
+    default: return { titel: `Partie beendet (${e.art})`, art: 'neutral' };
+  }
+}
+function zeigeErgebnis(p, ich = null) {
+  const k = $('#ergebnis');
+  const zeigen = !!p?.ende && !kastenZu.has(kastenSchluessel(p));
+  k.classList.toggle('versteckt', !zeigen);
+  if (!zeigen) return;
+  // In Schiri-Partien gilt erst das ergebnis des Schiris
+  const wartet = !!p.schiri && !p.ergebnis;
+  const t = wartet ? { titel: 'Warte auf das Ergebnis des Schiris …', art: 'neutral' } : ergebnisTitel(p.ende, ich, p.chess);
+  k.classList.remove('gewonnen', 'verloren', 'neutral');
+  k.classList.add(t.art);
+  k.dataset.art = p.ende.art;
+  $('#ergebnis-titel').textContent = t.titel;
+  $('#ergebnis-text').textContent = wartet ? `Eigene Auswertung: ${endeText(p.ende)}` : endeText(p.ende);
+  $('#ergebnis-schiri').textContent = p.ergebnis ? 'Verbindliches Ergebnis des Schiris.' : '';
+  const abw = $('#ergebnis-abweichung');
+  abw.classList.toggle('versteckt', !p.abweichung);
+  abw.textContent = p.abweichung ? `Das weicht von der eigenen Auswertung ab (${p.abweichung.eigen ? endeKurz(p.abweichung.eigen) : 'Partie läuft noch'}).` : '';
+  E.zeichneKasten($('#ergebnis-geld'), p);
+}
+$('#ergebnis-zu').onclick = () => { const p = baue(aktuell); if (p?.ende) kastenZu.add(kastenSchluessel(p)); zeichne(); };
+$('#ergebnis-lobby').onclick = () => { location.hash = ''; };
+// „Neue Partie“: zur Lobby, dort steht das Anlegen oben; Blick und Fokus darauf
+let anlegenZeigen = false;
+$('#ergebnis-neu').onclick = () => { anlegenZeigen = true; location.hash = ''; };
 
 const FARBE = { w: 'Weiß', b: 'Schwarz' };
 // Grund eines Endes, wie ihn der Schiri meldet

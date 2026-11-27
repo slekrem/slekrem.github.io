@@ -21,11 +21,12 @@ import {
   getTokenMetadata, parseSecret, schnorrSignMessage, Amount,
 } from '@cashu/cashu-ts';
 import { erlaubteMints, pruefeEinsatz, anspruch, sigAllNachricht, SPERRFRIST } from './regeln.js';
-import { rechnungFuerAdresse, bolt11Betrag } from './lnurl.js';
+import { rechnungFuerAdresse, bolt11Betrag, bolt11Ablauf } from './lnurl.js';
 
 export const SPEICHER_PRAEFIX = 'nostr-schach.wallet.';
-// NUTs, die eine Mint laut /v1/info können muss (NUT-04/05 mit bolt11 und sat); NUT-09 (restore)
-// braucht die Wallet, um nach einer verlorenen Antwort wiederherzustellen
+// NUTs, die eine Mint laut /v1/info können muss; NUT-09 (restore) braucht die Wallet, um nach einer
+// verlorenen Antwort wiederherzustellen. NUT-04/05 (bolt11, sat) sind keine Pflicht: Fehlen sie oder
+// sind sie abgeschaltet, gehen nur Aufladen bzw. Auszahlen nicht (`gesperrt` in pruefeMint).
 const NUTS_PFLICHT = ['7', '9', '11', '12'];
 // So viele exportierte Token merkt sich die Wallet (falls das Kopieren schiefgeht)
 const EXPORTE_MERKEN = 20;
@@ -125,18 +126,23 @@ export class CashuWallet {
   }
 
   // Lädt /v1/info, /v1/keysets und /v1/keys und prüft, ob die Mint kann, was die Wallet braucht.
-  // Ergebnis (mit Cache): `{ url, name, info, keysets }`, `keysets` im Format der Prüffunktionen aus
-  // regeln.js: `[{ id, unit: 'sat', active, input_fee_ppk, keys }]` (nur Keysets mit Schlüsseln).
+  // Ergebnis (mit Cache): `{ url, name, info, keysets, gesperrt }`, `keysets` im Format der
+  // Prüffunktionen aus regeln.js: `[{ id, unit: 'sat', active, input_fee_ppk, keys }]` (nur Keysets
+  // mit Schlüsseln). `gesperrt`: `{ aufladen, auszahlen }`, je null oder der Grund, warum das gerade
+  // nicht geht (NUT-04/05 abgeschaltet oder ohne bolt11/sat); alles andere geht dann trotzdem.
   async pruefeMint(url, { neu = false } = {}) {
     url = erlaubteMint(url);
     if (!neu && this._mints.has(url)) return this._oeffentlich(this._mints.get(url));
     const info = await this._anfrage(url, '/v1/info');
     const nuts = info?.nuts ?? {};
-    const bolt11 = (n) => nuts[n] && !nuts[n].disabled && Array.isArray(nuts[n].methods)
-      && nuts[n].methods.some((x) => x?.method === 'bolt11' && x?.unit === 'sat');
+    const lightning = (n, was) => {
+      const nut = nuts[n];
+      const bolt11 = Array.isArray(nut?.methods) && nut.methods.some((x) => x?.method === 'bolt11' && x?.unit === 'sat');
+      if (!nut || !bolt11) return `${was} per Lightning (bolt11, sat) nicht angeboten`;
+      return nut.disabled ? `${was} derzeit abgeschaltet` : null;
+    };
+    const gesperrt = { aufladen: lightning('4', 'Aufladen'), auszahlen: lightning('5', 'Auszahlen') };
     const fehlt = [];
-    if (!bolt11('4')) fehlt.push('NUT-04 (bolt11, sat)');
-    if (!bolt11('5')) fehlt.push('NUT-05 (bolt11, sat)');
     for (const n of NUTS_PFLICHT) if (nuts[n]?.supported !== true) fehlt.push(`NUT-${n.padStart(2, '0')}`);
     if (fehlt.length) throw new WalletFehler(`Mint kann nicht alles, was die Wallet braucht: ${fehlt.join(', ')}`);
     const { keysets: alle } = await this._anfrage(url, '/v1/keysets');
@@ -147,14 +153,22 @@ export class CashuWallet {
       keys: (Array.isArray(aktiv) ? aktiv : []).find((a) => a?.id === k.id)?.keys ?? null,
     }));
     if (!keysets.some((k) => k.active && k.keys)) throw new WalletFehler('Mint hat kein aktives Keyset für sat');
-    const m = { url, info, keysets, ids: alle.map((k) => k.id) };
+    const m = { url, info, keysets, ids: alle.map((k) => k.id), gesperrt };
     this._mints.set(url, m);
     return this._oeffentlich(m);
   }
   _oeffentlich(m) {
-    return { url: m.url, name: m.info?.name ?? m.url, info: m.info, keysets: m.keysets.filter((k) => k.keys) };
+    return { url: m.url, name: m.info?.name ?? m.url, info: m.info, keysets: m.keysets.filter((k) => k.keys), gesperrt: { ...m.gesperrt } };
   }
   async _mint(url) { await this.pruefeMint(url); return this._mints.get(erlaubteMint(url)); }
+  // Mint für Aufladen bzw. Auszahlen (`was`: 'aufladen' | 'auszahlen'). Sagt der Cache, dass es
+  // gerade nicht geht, wird /v1/info noch einmal geladen (die Mint kann es wieder eingeschaltet haben).
+  async _mintFuer(url, was) {
+    let m = await this._mint(url);
+    if (m.gesperrt[was]) { await this.pruefeMint(url, { neu: true }); m = this._mints.get(m.url); }
+    if (m.gesperrt[was]) throw new WalletFehler(`Bei dieser Mint gerade nicht möglich: ${m.gesperrt[was]}`, { mint: true });
+    return m;
+  }
 
   // Keyset mit Schlüsseln (lädt die Schlüssel eines älteren Keysets bei Bedarf nach)
   async _keyset(m, id) {
@@ -457,23 +471,28 @@ export class CashuWallet {
   }
 
   // --- Aufladen per Lightning (NUT-04) --------------------------------------------------------------
-  // Legt eine Mint-Quote an und gibt die Rechnung zurück: { quote, rechnung, betrag, ablauf }.
+  // Legt eine Mint-Quote an und gibt die Rechnung zurück: { quote, rechnung, betrag, ablauf, erstellt }.
+  // `ablauf` (Unix-Sekunden): das frühere aus `expiry` der Quote und dem Ablauf der BOLT11-Rechnung.
   // Die Quote steht im Speicher und übersteht ein Neuladen (offeneAufladungen, fortsetzen).
   async aufladen(url, betrag) {
     if (!Number.isSafeInteger(betrag) || betrag <= 0) throw new WalletFehler('Betrag muss eine positive ganze Zahl (sat) sein');
-    const m = await this._mint(url);
+    const m = await this._mintFuer(url, 'aufladen');
     return this._exklusiv(m.url, async (d) => {
       const q = await this._anfrage(m.url, '/v1/mint/quote/bolt11', { amount: betrag, unit: 'sat' });
       if (typeof q.quote !== 'string' || typeof q.request !== 'string') throw new WalletFehler('Mint liefert keine Rechnung');
-      const v = { id: zufallHex(16), art: 'aufladen', quote: q.quote, betrag, rechnung: q.request, ablauf: q.expiry ?? null, ausgaben: null };
+      let ablauf = Number.isSafeInteger(q.expiry) && q.expiry > 0 ? q.expiry : null;
+      try { const b = bolt11Ablauf(q.request); if (ablauf === null || b < ablauf) ablauf = b; } catch { /* Rechnung nicht lesbar: nur expiry */ }
+      const v = { id: zufallHex(16), art: 'aufladen', quote: q.quote, betrag, rechnung: q.request, ablauf,
+        erstellt: Math.floor(Date.now() / 1000), ausgaben: null };
       d.offen.push(v);
       this._speichere(m.url, d);
-      return { quote: v.quote, rechnung: v.rechnung, betrag, ablauf: v.ablauf };
+      return { quote: v.quote, rechnung: v.rechnung, betrag, ablauf: v.ablauf, erstellt: v.erstellt };
     });
   }
+  // Offene Aufladungen einer Mint: [{ quote, rechnung, betrag, ablauf, erstellt }] (`erstellt` fehlt bei älteren)
   offeneAufladungen(url) {
     return this._lade(erlaubteMint(url)).offen.filter((v) => v.art === 'aufladen')
-      .map(({ quote, rechnung, betrag, ablauf }) => ({ quote, rechnung, betrag, ablauf }));
+      .map(({ quote, rechnung, betrag, ablauf, erstellt }) => ({ quote, rechnung, betrag, ablauf: ablauf ?? null, erstellt: erstellt ?? null }));
   }
   // Fragt den Stand der Quote ab; ist sie bezahlt, werden die Proofs geprägt (die Outputs stehen
   // vorher im Speicher). Ergebnis: { status: 'offen' | 'gutgeschrieben' | 'abgelaufen', betrag }.
@@ -528,10 +547,12 @@ export class CashuWallet {
   // --- Auszahlen per Lightning (NUT-05) -------------------------------------------------------------
   // Holt eine Melt-Quote für eine BOLT11-Rechnung oder (mit `adresse` und `betrag`) für eine
   // Lightning-Adresse (lnurl.js). Ergebnis zum Anzeigen vor dem Bezahlen:
-  // { quote, rechnung, betrag, gebuehr (fee_reserve), inputGebuehr, gesamt, ablauf }.
+  // { quote, rechnung, betrag, gebuehr (fee_reserve), inputGebuehr, gesamt, ablauf, beschreibung }.
+  // `beschreibung`: Feld `d` einer Rechnung von einer Lightning-Adresse ohne description_hash, sonst null.
   async auszahlungVorbereiten(url, { rechnung, adresse, betrag } = {}) {
-    const m = await this._mint(url);
-    if (adresse) ({ rechnung } = await rechnungFuerAdresse(adresse, betrag, { fetch: this._fetch }));
+    const m = await this._mintFuer(url, 'auszahlen');
+    let beschreibung = null;
+    if (adresse) ({ rechnung, beschreibung } = await rechnungFuerAdresse(adresse, betrag, { fetch: this._fetch }));
     let msat;
     try { msat = bolt11Betrag(rechnung); } catch (e) { throw new WalletFehler(e.message); }
     if (msat === null) throw new WalletFehler('Rechnung ohne Betrag');
@@ -542,13 +563,13 @@ export class CashuWallet {
     const proofs = this._lade(m.url).proofs;
     let inputGebuehr = 0;
     try { inputGebuehr = this._gebuehr(m, this._waehle(m, proofs, sat + reserve)); } catch { /* reicht nicht; zeigt auszahlen */ }
-    return { quote: q.quote, rechnung, betrag: sat, gebuehr: reserve, inputGebuehr, gesamt: sat + reserve + inputGebuehr, ablauf: q.expiry ?? null };
+    return { quote: q.quote, rechnung, betrag: sat, gebuehr: reserve, inputGebuehr, gesamt: sat + reserve + inputGebuehr, ablauf: q.expiry ?? null, beschreibung };
   }
   // Bezahlt eine vorbereitete Auszahlung und nimmt das Wechselgeld zurück (NUT-08). Ergebnis:
   // { status: 'bezahlt', betrag, gebuehr (tatsächlich), wechselgeld, preimage } oder
   // { status: 'ausstehend' } (Mint bezahlt noch; fortsetzen() klärt später).
   async auszahlen(url, vorbereitung) {
-    const m = await this._mint(url);
+    const m = await this._mintFuer(url, 'auszahlen');
     return this._exklusiv(m.url, async (d) => {
       if (d.offen.some((x) => x.art === 'auszahlen' && x.quote === vorbereitung.quote)) throw new WalletFehler('Diese Auszahlung läuft schon');
       const ks = this._aktiv(m);

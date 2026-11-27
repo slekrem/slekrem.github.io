@@ -7,8 +7,10 @@
 //   name@domain  →  GET https://<domain>/.well-known/lnurlp/<name>
 //                →  { tag: "payRequest", callback, minSendable, maxSendable, metadata }  (msat)
 //                →  GET <callback>?amount=<msat>  →  { pr: "lnbc…" }
-// Die Rechnung wird nur angenommen, wenn ihr Betrag genau dem verlangten entspricht und ihr
-// `description_hash` (Feld `h`) gleich SHA-256 des `metadata`-Texts aus der ersten Antwort ist (LUD-06).
+// Die Rechnung wird nur angenommen, wenn ihr Betrag genau dem verlangten entspricht und, falls sie
+// einen `description_hash` (Feld `h`) trägt, dieser gleich SHA-256 des `metadata`-Texts aus der ersten
+// Antwort ist (LUD-06). Ohne `h` (verbreitet, z. B. Wallet of Satoshi mit Feld `d`) gilt sie, weil sie
+// vom `callback` der aufgelösten Adresse kommt; ihre Beschreibung (`d`) zeigt die Wallet vor dem Zahlen.
 
 // Teil einer Lightning-Adresse: Name (LUD-16: a-z0-9-_.+) und Domain (ohne Schema, ohne Pfad)
 const ADRESSE = /^([a-z0-9._+-]+)@([a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?)$/;
@@ -48,27 +50,63 @@ export function bolt11Betrag(rechnung) {
 // Prüfsumme (6 Wörter). Die Prüfsumme und die Signatur prüft die Mint beim Bezahlen.
 const BECH32 = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const FELD_H = 23; // 'h' in bech32
-export function bolt11BeschreibungHash(rechnung) {
+const FELD_D = 13; // 'd' in bech32
+// 5-Bit-Wörter zu Bytes; übrige Bits am Ende (Auffüllung) fallen weg
+const bytesAus = (woerter) => {
+  let bits = 0, wert = 0;
+  const bytes = [];
+  for (const x of woerter) {
+    wert = ((wert << 5) | x) & 0xfff; bits += 5;
+    if (bits >= 8) { bits -= 8; bytes.push((wert >> bits) & 0xff); }
+  }
+  return bytes;
+};
+// Daten des ersten Felds vom Typ `gesucht` (mit Länge `laengeSoll`, falls angegeben) als
+// 5-Bit-Wörter, null ohne dieses Feld
+function bolt11Feld(rechnung, gesucht, laengeSoll = null) {
   bolt11Betrag(rechnung); // Form prüfen
   const r = rechnung.trim().toLowerCase().replace(/^lightning:/, '');
   const w = [...r.slice(r.lastIndexOf('1') + 1)].map((c) => BECH32.indexOf(c));
   const ende = w.length - 6 - 104;
   if (ende < 7) throw new Error('BOLT11-Rechnung zu kurz');
   for (let i = 7; i + 3 <= ende;) {
-    const typ = w[i], laenge = w[i + 1] * 32 + w[i + 2], daten = w.slice(i + 3, i + 3 + laenge);
+    const typ = w[i], laenge = w[i + 1] * 32 + w[i + 2];
     if (i + 3 + laenge > ende) throw new Error('BOLT11-Feld reicht über das Ende');
-    if (typ === FELD_H && laenge === 52) {
-      let bits = 0, wert = 0;
-      const bytes = [];
-      for (const x of daten) {
-        wert = (wert << 5) | x; bits += 5;
-        if (bits >= 8) { bits -= 8; bytes.push((wert >> bits) & 0xff); }
-      }
-      return bytes.slice(0, 32).map((b) => b.toString(16).padStart(2, '0')).join('');
-    }
+    if (typ === gesucht && (laengeSoll === null || laenge === laengeSoll)) return w.slice(i + 3, i + 3 + laenge);
     i += 3 + laenge;
   }
   return null;
+}
+export function bolt11BeschreibungHash(rechnung) {
+  const daten = bolt11Feld(rechnung, FELD_H, 52);
+  return daten && bytesAus(daten).slice(0, 32).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Beschreibung einer BOLT11-Rechnung im Klartext (Feld `d`, UTF-8), null ohne dieses Feld. Wirft,
+// wenn die Rechnung nicht wie BOLT11 aussieht.
+export function bolt11Beschreibung(rechnung) {
+  const daten = bolt11Feld(rechnung, FELD_D);
+  return daten && new TextDecoder().decode(new Uint8Array(bytesAus(daten)));
+}
+
+// Ablauf einer BOLT11-Rechnung in Unix-Sekunden: Zeitstempel (die ersten 7 Wörter) plus Feld `x`
+// (Gültigkeit in Sekunden, ohne Feld 3600). Wirft, wenn die Rechnung nicht wie BOLT11 aussieht.
+const FELD_X = 6; // 'x' in bech32
+const wortZahl = (w) => w.reduce((s, x) => s * 32 + x, 0);
+export function bolt11Ablauf(rechnung) {
+  bolt11Betrag(rechnung); // Form prüfen
+  const r = rechnung.trim().toLowerCase().replace(/^lightning:/, '');
+  const w = [...r.slice(r.lastIndexOf('1') + 1)].map((c) => BECH32.indexOf(c));
+  const ende = w.length - 6 - 104;
+  if (ende < 7) throw new Error('BOLT11-Rechnung zu kurz');
+  let dauer = 3600;
+  for (let i = 7; i + 3 <= ende;) {
+    const typ = w[i], laenge = w[i + 1] * 32 + w[i + 2];
+    if (i + 3 + laenge > ende) throw new Error('BOLT11-Feld reicht über das Ende');
+    if (typ === FELD_X && laenge > 0 && laenge <= 10) dauer = wortZahl(w.slice(i + 3, i + 3 + laenge));
+    i += 3 + laenge;
+  }
+  return wortZahl(w.slice(0, 7)) + dauer;
 }
 
 const sha256Hex = async (text) => [...new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))]
@@ -99,9 +137,12 @@ export async function loeseAdresseAuf(adresse, { fetch: f = globalThis.fetch } =
   return { callback: callback.href, min, max, metadata: d.metadata };
 }
 
-// Holt eine Rechnung über `sat` an die Adresse: `{ rechnung, msat }`. Wirft, wenn der Betrag
-// außerhalb von Mindest- und Höchstbetrag liegt, die Rechnung über einen anderen Betrag lautet oder
-// ihr `description_hash` nicht SHA-256 des `metadata` ist (LUD-06).
+// Holt eine Rechnung über `sat` an die Adresse: `{ rechnung, msat, beschreibung }`. Wirft, wenn der
+// Betrag außerhalb von Mindest- und Höchstbetrag liegt, die Rechnung über einen anderen Betrag lautet
+// oder ihr `description_hash` nicht SHA-256 des `metadata` ist (LUD-06). Ohne `description_hash`
+// (z. B. Wallet of Satoshi, die nur das Feld `d` setzt) gilt die Rechnung trotzdem, weil sie vom
+// `callback` der aufgelösten Adresse kommt und der Betrag stimmt; `beschreibung` ist dann das Feld `d`
+// (Klartext, sonst null), zum Anzeigen vor dem Bezahlen.
 export async function rechnungFuerAdresse(adresse, sat, optionen = {}) {
   if (!Number.isSafeInteger(sat) || sat <= 0) throw new Error('Betrag muss eine positive ganze Zahl (sat) sein');
   const msat = sat * 1000;
@@ -115,8 +156,6 @@ export async function rechnungFuerAdresse(adresse, sat, optionen = {}) {
   const betrag = bolt11Betrag(d.pr);
   if (betrag !== msat) throw new Error(`Rechnung lautet über ${betrag === null ? 'keinen Betrag' : `${betrag} msat`} statt ${msat} msat`);
   const hash = bolt11BeschreibungHash(d.pr);
-  if (hash !== await sha256Hex(metadata)) {
-    throw new Error(hash === null ? 'Rechnung ohne description_hash' : 'description_hash der Rechnung passt nicht zum metadata der Adresse');
-  }
-  return { rechnung: d.pr, msat };
+  if (hash !== null && hash !== await sha256Hex(metadata)) throw new Error('description_hash der Rechnung passt nicht zum metadata der Adresse');
+  return { rechnung: d.pr, msat, beschreibung: hash === null ? bolt11Beschreibung(d.pr) : null };
 }
