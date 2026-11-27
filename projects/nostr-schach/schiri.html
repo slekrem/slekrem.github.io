@@ -63,6 +63,11 @@
   td.id { word-break: normal; white-space: nowrap; }
   #protokoll { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; font-size: 13px; }
   #protokoll li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+  #mint-fehlt { margin: 0; padding: 10px 16px; color: #fff; font-weight: 600; text-align: center; background: var(--warn); }
+  /* Zweite Zeile je Partie: Einsatz, Anträge, eigene Events */
+  tr.details td { padding-top: 0; font-size: 12px; }
+  tr.details .warn { color: var(--warn); font-weight: 600; }
+  tr.has-details td { border-bottom: none; }
 </style>
 </head>
 <body>
@@ -72,12 +77,14 @@
   <span id="kopf-status">
     <span id="wach" class="warn">Wake Lock wird angefragt …</span>
     <span id="lebenszeichen">Lebenszeichen: noch keins</span>
+    <span id="einsaetze">Einsätze in laufenden Partien: 0 sat</span>
     <span id="speicher"></span>
   </span>
 </header>
 <p id="offen-lassen">Dieser Tab ist der Schiri. Offen lassen.</p>
 <p id="kein-relay" class="versteckt">Kein Relay antwortet (kein EOSE). Der Schiri handelt nicht, bis
   mindestens ein Relay geantwortet hat.</p>
+<p id="mint-fehlt" class="versteckt"></p>
 
 <main>
   <section>
@@ -114,7 +121,9 @@
       <p id="schluessel-info" class="muted"></p>
       <p class="muted">Der Schlüssel liegt nur in diesem Browser (localStorage), getrennt vom
         Spieler-Schlüssel. Ein Backup sichert ihn; geht er verloren, kann dieser Schiri keine
-        Partien mehr bestätigen. Die eigenen gesendeten Events stehen zusätzlich in IndexedDB.</p>
+        Partien mehr bestätigen. Die eigenen gesendeten Events stehen zusätzlich in IndexedDB.
+        In Einsatz-Partien hält der Schiri kein Geld: Er prüft die gesperrten Einsätze bei der Mint
+        und gibt am Ende mit seiner Signatur frei, was dem Spieler zusteht.</p>
     </div>
 
     <div class="karte">
@@ -125,14 +134,18 @@
 </main>
 
 <!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
-<footer>Nostr-Schach <span id="version">v0.1.9</span></footer>
+<footer>Nostr-Schach <span id="version">v0.1.13</span></footer>
 
 <script type="module">
 import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
-import { KIND, KIND_ACK, KIND_LEBENSZEICHEN, TAG, partieVon, lies, baue } from './regeln.js';
+import {
+  KIND, KIND_ACK, KIND_LEBENSZEICHEN, TAG, partieVon, lies, baue, pruefeEinsatz, anspruch,
+  SPERRFRIST, ZAHLFRIST, START_VORLAUF,
+} from './regeln.js';
+import { CashuWallet, ramSpeicher, signiereNachricht } from './cashu.js';
 
-// Protokoll und Regeln stehen in regeln.js (docs/protokoll.md), Relays in einstellungen.js.
-const { RELAYS } = window.EINSTELLUNGEN;
+// Protokoll und Regeln stehen in regeln.js (docs/protokoll.md), Relays und Mints in einstellungen.js.
+const { RELAYS, MINTS } = window.EINSTELLUNGEN;
 const LS_SK = 'nostr-schach.schiri.sk'; // getrennt vom Spieler-Schlüssel (nostr-schach.sk)
 const ZURUECK = 2 * 86400;              // Partien der letzten zwei Tage
 const EOSE_FRIST = 5000;                // ms; ohne EOSE danach gilt ein Relay als „antwortet nicht“
@@ -141,8 +154,22 @@ const LEBENSZEICHEN_ALLE = 60_000;      // ms
 const AUSSETZER = 5000;                 // ms zwischen zwei Takten, ab denen das Protokoll es vermerkt
 const EOSE_NIE = 2 ** 31 - 1;           // „kein Zeitlimit“ für EOSE (nostr-tools meldet sonst nach 4,4 s EOSE)
 // Enden, die der Schiri mit einem `ergebnis` feststellt. Auch die Annullierung (ANNULLIERT_NACH),
-// etwa wenn er nach einem Ausfall wiederkommt: Dann steht sie verbindlich auf den Relays.
-const MELDEN = ['matt', 'remis', 'aufgabe', 'zeit', 'abbruch', 'doppelzug', 'annulliert'];
+// etwa wenn er nach einem Ausfall wiederkommt: Dann steht sie verbindlich auf den Relays. In
+// Einsatz-Partien dazu `nicht-bezahlt`.
+const MELDEN = ['matt', 'remis', 'aufgabe', 'zeit', 'abbruch', 'doppelzug', 'annulliert', 'nicht-bezahlt'];
+// Einsatz-Partien (docs/protokoll.md, „Einsatz“ und „Schiri-Seite“)
+const MINT_NEU_LADEN = 60_000;              // ms; Keysets einer Mint höchstens so oft neu laden
+const MINT_RUECKZUG = [10, 30, 60, 120, 300]; // s bis zum nächsten Versuch nach einem Fehler
+const START_PRUEFEN_ALLE = 10_000;          // ms; NUT-07 vor dem start höchstens so oft je Partie
+const FREIGABE_PRUEFEN_ALLE = 10_000;       // ms; NUT-07 vor einer Freigabe nach einem Hindernis
+const ZUSTAND_ALLE = 120_000;               // ms; NUT-07 sonst (Abo nach dem ergebnis)
+const FREIGABEN_JE_EINSATZ = 10;            // Grenze gegen Flut
+// Eigene Events auf genug Relays: nach BESTAETIGT_NACH und dann bei jeder Wiederverbindung bzw.
+// spätestens alle ERNEUT_ALLE erneut an die Relays ohne Bestätigung, solange weniger als
+// MIN_BESTAETIGUNGEN (bzw. alle verbundenen) mit OK true bestätigt haben
+const BESTAETIGT_NACH = 10_000;             // ms
+const ERNEUT_ALLE = 5 * 60_000;             // ms
+const MIN_BESTAETIGUNGEN = 3;
 
 const $ = (s) => document.querySelector(s);
 const pool = new SimplePool({ enableReconnect: true });
@@ -300,17 +327,80 @@ function zeigeRelays() {
     div.children[2].textContent = stumm ? 'antwortet nicht' : '';
     $('#relays').append(div);
   }
-  // Nach einer Wiederverbindung alle Abos neu aufsetzen, damit nichts verschluckt wird
-  if (wieder) erneuere();
+  // Nach einer Wiederverbindung alle Abos neu aufsetzen, damit nichts verschluckt wird, und eigene
+  // Events mit zu wenigen Bestätigungen erneut senden
+  if (wieder) { erneuere(); pruefeBestaetigungen(true); }
+}
+
+// --- Eigene Events auf genug Relays --------------------------------------------
+// Je eigenem Event (außer Lebenszeichen): welche Relays es mit OK true bestätigt haben (`ok`),
+// welche es mit OK false abgelehnt haben (`abgelehnt`, mit Grund; die bekommen es nicht noch
+// einmal) und an welche es gerade unterwegs ist (`laeuft`).
+const bestaetigungen = new Map(); // Event-ID → { ev, g, name, ok, abgelehnt, laeuft, seit, geprueft, runde }
+
+// Kurzname für Anzeige und Protokoll, z. B. „start“, „ack 3“, „freigabe 1a2b3c4d“
+const kurzname = (ev, ply) => (ev.kind === KIND_ACK ? `ack ${ply ?? ''}`.trim()
+  : ev.c.t === 'freigabe' ? `freigabe ${ev.tags.find((t) => t[0] === 'e')[1].slice(0, 8)}` : ev.c.t);
+
+function verfolge(ev, name) {
+  let b = bestaetigungen.get(ev.id);
+  if (!b) {
+    b = { ev, g: partieVon(ev), name, ok: new Set(), abgelehnt: new Map(), laeuft: new Set(), seit: Date.now(), geprueft: false, runde: 0 };
+    bestaetigungen.set(ev.id, b);
+  }
+  veroeffentliche(b);
+  return b;
+}
+
+// An alle Relays ohne Bestätigung und ohne Ablehnung senden; gibt die Zahl der Relays zurück
+function veroeffentliche(b) {
+  let n = 0;
+  for (const url of RELAYS) {
+    if (b.ok.has(url) || b.abgelehnt.has(url) || b.laeuft.has(url)) continue;
+    b.laeuft.add(url); n++;
+    pool.ensureRelay(url, { connectionTimeout: EOSE_FRIST }).then((relay) => relay.publish(roh(b.ev)).then(
+      () => { b.ok.add(url); },
+      (e) => {
+        // OK false heißt: das Relay lehnt ab. Zeitüberschreitung oder Verbindungsabbruch nicht.
+        if (e instanceof Error && e.name === 'Error' && e.message !== 'publish timed out' && relay.connected) {
+          const grund = e.message || 'ohne Grund';
+          b.abgelehnt.set(url, grund);
+          hinweis(`${b.g} · ${b.name}: ${url.replace('wss://', '')} lehnt ab (OK false): ${grund}`);
+        }
+      })).catch(() => {}).finally(() => { b.laeuft.delete(url); zeigeProtokoll(); zeige(); });
+  }
+  b.runde = Date.now();
+  return n;
+}
+
+// Nach BESTAETIGT_NACH, bei jeder Wiederverbindung (`wieder`) und spätestens alle ERNEUT_ALLE:
+// Haben weniger als MIN_BESTAETIGUNGEN Relays (bzw. alle verbundenen, wenn es weniger sind)
+// bestätigt, geht das Event erneut an die Relays ohne Bestätigung. Für Events von Partien, die die
+// Seite verfolgt, nicht älter als zwei Tage (auch nach dem eigenen ergebnis, damit es ankommt).
+function pruefeBestaetigungen(wieder = false) {
+  const st = pool.listConnectionStatus(), n = Date.now();
+  const an = RELAYS.filter((u) => (st.get(u) ?? st.get(u + '/')) === true).length;
+  const ziel = Math.min(MIN_BESTAETIGUNGEN, an);
+  for (const b of bestaetigungen.values()) {
+    if (!partien.has(b.g) || b.ev.created_at < jetzt() - ZURUECK) continue;
+    if (!b.geprueft ? n - b.seit < BESTAETIGT_NACH : !wieder && n - b.runde < ERNEUT_ALLE) continue;
+    b.geprueft = true; b.runde = n;
+    if (b.ok.size >= ziel) continue;
+    const vorher = b.ok.size, k = veroeffentliche(b);
+    if (k) hinweis(`${b.g} · ${b.name}: erst von ${vorher} von ${RELAYS.length} Relays bestätigt, erneut an ${k} gesendet`);
+  }
 }
 
 // --- Events und Abos ---------------------------------------------------------
 const events = new Map();   // id → Event
 const evsVon = new Map();   // Partie-ID → Events
-const partien = new Map();  // Partie-ID → { g, abo, bereit, seit, erledigt, p, aktion }
+// Partie-ID → { g, abo, bereit, seit, erledigt, p, aktion, mint, zustand, frage, grund, … }
+// (Einsatz-Partien: `mint` URL der Mint, `zustand` letzter Stand der Einsätze bei der Mint nach
+// NUT-07, `frage` NUT-07-Anfrage läuft, `grund` warum gerade kein start geht)
+const partien = new Map();
 // Was dieser Schiri schon gesendet hat, aus zwei Quellen: IndexedDB (jedes Event, das er signiert,
 // steht dort, bevor es gesendet wird) und eigene Events von den Relays. Schlüssel: start:<g>,
-// ergebnis:<g>, ack:<zug-id>, ply:<g>:<ply>.
+// ergebnis:<g>, ack:<zug-id>, ply:<g>:<ply>, freigabe:<antrag-id>.
 const gesendet = new Set();
 const protokoll = [];
 let hauptAbo = null, hauptSeit = 0, hauptBereit = false;
@@ -337,6 +427,8 @@ function merkeGesendet(ev) {
     if (ply !== undefined) gesendet.add(`ply:${g}:${ply}`);
   } else if (ev.c.t === 'start' || ev.c.t === 'ergebnis') {
     gesendet.add(`${ev.c.t}:${g}`);
+  } else if (ev.c.t === 'freigabe') {
+    gesendet.add(`freigabe:${ev.tags.find((t) => t[0] === 'e')[1]}`);
   }
 }
 
@@ -354,7 +446,8 @@ function abonniere() {
 
 function folge(g) {
   if (partien.has(g)) return;
-  const partie = { g, abo: null, bereit: false, seit: Date.now(), erledigt: gesendet.has(`ergebnis:${g}`), p: null, aktion: '' };
+  const partie = { g, abo: null, bereit: false, seit: Date.now(), erledigt: gesendet.has(`ergebnis:${g}`), p: null, aktion: '',
+    mint: null, zustand: null, zustandZeit: 0, frage: false, startVersuch: 0, freigabeVersuch: 0, grund: null, hinweise: new Set() };
   partien.set(g, partie);
   aboFuer(partie);
 }
@@ -362,7 +455,8 @@ function folge(g) {
 // Gehandelt wird erst, wenn mindestens ein Relay wirklich EOSE gemeldet hat: Dann kennt die Seite
 // dessen gespeicherte Events, auch die eigenen. Was die übrigen Relays noch nicht geliefert haben,
 // steht in IndexedDB. Erledigte Partien (mit eigenem ergebnis) werden nur einmal geladen, für die
-// Übersicht, und nicht weiter abonniert.
+// Übersicht, und nicht weiter abonniert. Einsatz-Partien bleiben nach dem ergebnis abonniert, bis
+// die Einsätze bei der Mint eingelöst sind oder die Sperrfrist vorbei ist (siehe handle).
 function aboFuer(partie) {
   partie.abo?.close();
   partie.abo = abo({ kinds: [KIND, KIND_ACK], '#g': [partie.g] }, {
@@ -421,6 +515,8 @@ function speichere(ev, ply) {
 async function beginne() {
   const meinLauf = ++lauf;
   geladen = false;
+  // Zugang zu den Mints (Keysets mit Cache, NUT-07). Ohne Speicher: der Schiri hält kein Geld.
+  mintZugang = new CashuWallet({ pubkey: pk, speicher: ramSpeicher() });
   db?.close(); db = null; dbVon = null;
   let d = null, liste = [];
   try {
@@ -445,15 +541,16 @@ async function beginne() {
     nachPartie.get(r.g).push(ev);
   }
   // Gleiche Event-ID, also harmlos; schließt Lücken, falls ein Senden vor dem Neuladen nicht
-  // ankam. Von erledigten Partien nur das ergebnis.
+  // ankam. Von Partien mit eigenem ergebnis nur das ergebnis und die Freigaben.
   const grenze = jetzt() - ZURUECK, erneut = [];
   for (const [g, evs] of nachPartie) {
     if (Math.max(...evs.map((e) => e.created_at)) < grenze) continue;
     const erledigt = gesendet.has(`ergebnis:${g}`);
-    erneut.push(...evs.filter((e) => !erledigt || e.c?.t === 'ergebnis'));
+    erneut.push(...evs.filter((e) => !erledigt || e.c?.t === 'ergebnis' || e.c?.t === 'freigabe'));
     folge(g);
   }
-  for (const ev of erneut) for (const p of pool.publish(RELAYS, roh(ev))) p.catch(() => {});
+  const plyVon = new Map(liste.map((r) => [r.id, r.ply]));
+  for (const ev of erneut) verfolge(ev, kurzname(ev, plyVon.get(ev.id)));
   if (erneut.length) hinweis(`${erneut.length} gespeicherte eigene Event(s) erneut an die Relays gesendet`);
 
   geladen = true;
@@ -465,7 +562,7 @@ async function beginne() {
 function neuBeginnen() {
   for (const partie of partien.values()) partie.abo?.close();
   hauptAbo?.close(); hauptAbo = null;
-  partien.clear(); events.clear(); evsVon.clear(); gesendet.clear();
+  partien.clear(); events.clear(); evsVon.clear(); gesendet.clear(); bestaetigungen.clear();
   zeige();
   beginne();
 }
@@ -485,20 +582,45 @@ function takt() {
   letzterTakt = n;
   if (luecke > AUSSETZER) hinweis(`Aussetzer: ${Math.round(luecke / 1000)} s ohne Takt (seit ${uhrzeit(new Date(n - luecke))})`);
   handle();
+  pruefeBestaetigungen();
   if (geladen && n - lebenszeichenZuletzt >= LEBENSZEICHEN_ALLE) lebenszeichen();
 }
 setInterval(takt, 1000);
 
-// Jede Partie mit baue() auswerten und, wo nötig, start, ack oder ergebnis senden
+// Partie nachbauen, in Einsatz-Partien mit den Keysets ihrer Mint (sobald geladen). Die Mint steht
+// im gezählten create; beim ersten Mal ist sie noch unbekannt, dann wird zweimal gebaut.
+function bauePartie(partie, t) {
+  const evs = evsVon.get(partie.g) ?? [];
+  let p = baue(evs, t, mints.get(partie.mint)?.schluessel ?? undefined);
+  if (p?.einsatz && p.einsatz.mint !== partie.mint) {
+    partie.mint = p.einsatz.mint;
+    p = baue(evs, t, mints.get(partie.mint)?.schluessel ?? undefined);
+  }
+  return p;
+}
+
+// Jede Partie mit baue() auswerten und, wo nötig, start, ack, ergebnis oder freigabe senden
 function handle() {
   const t = jetzt();
   for (const partie of partien.values()) {
-    const p = baue(evsVon.get(partie.g) ?? [], t);
+    const p = bauePartie(partie, t);
     partie.p = p;
+    const meine = !!p && p.schiri === pk;
+    if (meine && p.einsatz) {
+      pflegeMint(p.einsatz.mint);
+      // Nach dem ergebnis bleibt eine Einsatz-Partie abonniert (Anträge), bis die Einsätze bei der
+      // Mint eingelöst sind oder die Sperrfrist vorbei ist; auch nach dem Neuladen
+      if (partie.erledigt && !einsatzErledigt(partie, p, t)) { partie.erledigt = false; aboFuer(partie); }
+    }
     if (!partie.bereit || partie.erledigt) continue;
-    if (p && p.schiri === pk) entscheide(partie, p, t);
-    // Mit eigenem ergebnis ist die Partie erledigt: nicht weiter abonnieren
-    if (gesendet.has(`ergebnis:${partie.g}`)) { partie.erledigt = true; partie.abo?.close(); partie.abo = null; }
+    if (meine) {
+      entscheide(partie, p, t);
+      if (p.einsatz && (p.start || p.ergebnis)) zustandPflegen(partie, p);
+    }
+    // Mit eigenem ergebnis ist die Partie erledigt (Einsatz-Partien siehe oben): nicht weiter abonnieren
+    if (gesendet.has(`ergebnis:${partie.g}`) && !(meine && p.einsatz && !einsatzErledigt(partie, p, t))) {
+      partie.erledigt = true; partie.abo?.close(); partie.abo = null;
+    }
   }
   zeige();
   zeigeWarnung();
@@ -510,12 +632,21 @@ function zeigeWarnung() {
   const stumm = (geladen && !hauptBereit && n - hauptSeit > EOSE_FRIST)
     || [...partien.values()].some((x) => !x.bereit && !x.erledigt && n - x.seit > EOSE_FRIST);
   $('#kein-relay').classList.toggle('versteckt', !stumm);
+  // Fehlen in einer offenen Einsatz-Partie die Schlüssel der Mint, ruhen dort alle Geldfragen
+  const ohne = [...new Set(meinePartien().filter((x) => x.p.einsatz && !x.erledigt && !x.p.mintSchluessel)
+    .map((x) => mintName(x.p.einsatz.mint)))];
+  $('#mint-fehlt').classList.toggle('versteckt', !ohne.length);
+  $('#mint-fehlt').textContent = ohne.length ? `Schlüssel der Mint fehlen (${ohne.join(', ')}, nicht erreichbar). `
+    + 'In diesen Einsatz-Partien handelt der Schiri nicht bei Geldfragen: kein start, kein nicht-bezahlt, keine Freigabe.' : '';
 }
 
 function entscheide(partie, p, t) {
   const g = p.g;
   const basis = [['t', TAG], ['g', g]];
-  if (p.ergebnis || gesendet.has(`ergebnis:${g}`)) return;
+  if (p.ergebnis || gesendet.has(`ergebnis:${g}`)) {
+    if (p.einsatz && p.ergebnis) freigeben(partie, p);
+    return;
+  }
   if (p.ende) {
     if (!MELDEN.includes(p.ende.art) || !p.ausloeser) return;
     const { art, verlierer } = p.ende;
@@ -526,10 +657,8 @@ function entscheide(partie, p, t) {
   }
   if (p.join && !p.start) {
     if (gesendet.has(`start:${g}`)) return;
-    return sende(partie, 'start', {
-      kind: KIND, created_at: Math.max(t, p.join.created_at),
-      tags: [...basis, ['e', p.join.id]], content: JSON.stringify({ t: 'start' }),
-    });
+    if (p.einsatz) return startMitEinsatz(partie, p, t);
+    return sendeStart(partie, p, t);
   }
   const z = p.ausstehend;
   if (!z || gesendet.has(`ack:${z.id}`) || plyBestaetigt(g, z.c.ply)) return;
@@ -539,20 +668,177 @@ function entscheide(partie, p, t) {
   });
 }
 
+function sendeStart(partie, p, t) {
+  return sende(partie, 'start', {
+    kind: KIND, created_at: Math.max(t, p.join.created_at),
+    tags: [['t', TAG], ['g', p.g], ['e', p.join.id]], content: JSON.stringify({ t: 'start' }),
+  });
+}
+
 async function sende(partie, text, vorlage) {
   const ev = finalizeEvent(vorlage, sk);
   const ziel = ev.kind === KIND_ACK ? ev.tags.find((t) => t[0] === 'e')[1] : null;
   const ply = ziel ? events.get(ziel)?.c?.ply : undefined;
   verarbeite(ev); // merkt es sofort als gesendet
-  const eintrag = { zeit: uhrzeit(), g: partie.g, text, ok: null, gespeichert: null };
+  const eintrag = { zeit: uhrzeit(), g: partie.g, text, b: null, gespeichert: null };
   protokoll.unshift(eintrag);
   partie.aktion = `${eintrag.zeit} ${text}`;
   zeigeProtokoll();
-  // Erst in IndexedDB, dann an die Relays
+  // Erst in IndexedDB, dann an die Relays (mit Bestätigungen je Relay)
   eintrag.gespeichert = await speichere(ev, ply);
-  const r = await Promise.allSettled(pool.publish(RELAYS, ev));
-  eintrag.ok = r.filter((x) => x.status === 'fulfilled').length;
+  eintrag.b = verfolge(events.get(ev.id) ?? ev, kurzname(ev, ply));
   zeigeProtokoll();
+}
+
+// --- Einsatz-Partien: Mint, start, Freigaben --------------------------------------------------
+// Der Schiri hält kein Geld. Er lädt die Keysets der Mint (cashu.js, pruefeMint mit Cache), fragt
+// bei der Mint nach, ob die Einsätze noch unausgegeben sind (NUT-07), und signiert am Ende Anträge.
+let mintZugang = null;
+const mints = new Map(); // URL → { schluessel, fehler, versuche, naechster, laeuft }
+const mintName = (url) => MINTS.find((m) => m.url === url)?.name ?? url;
+
+// Keysets einer Mint laden: höchstens einmal je Minute neu, nach einem Fehler mit Rückzug
+function pflegeMint(url) {
+  let m = mints.get(url);
+  if (!m) mints.set(url, m = { schluessel: null, fehler: null, versuche: 0, naechster: 0, laeuft: false });
+  if (m.laeuft || Date.now() < m.naechster || !mintZugang) return;
+  m.laeuft = true;
+  mintZugang.pruefeMint(url, { neu: true }).then((r) => {
+    // Gleicher Inhalt: dasselbe Objekt behalten (baue merkt sich geprüfte Einsätze je Objekt)
+    if (!m.schluessel || JSON.stringify(r.keysets) !== JSON.stringify(m.schluessel)) m.schluessel = r.keysets;
+    if (m.fehler) hinweis(`Mint ${mintName(url)} wieder erreichbar, Schlüssel geladen`);
+    m.fehler = null; m.versuche = 0; m.naechster = Date.now() + MINT_NEU_LADEN;
+  }, (e) => {
+    if (!m.fehler) hinweis(`Mint ${mintName(url)} nicht erreichbar: ${e.message}`);
+    m.fehler = e.message;
+    m.naechster = Date.now() + MINT_RUECKZUG[Math.min(m.versuche, MINT_RUECKZUG.length - 1)] * 1000;
+    m.versuche++;
+  }).finally(() => { m.laeuft = false; plane(); });
+}
+
+// Stand eines gezählten Einsatzes bei der Mint aus der letzten Abfrage: 'UNSPENT', 'SPENT',
+// 'PENDING', 'TEILWEISE' (ein Teil ausgegeben) oder null (unbekannt)
+const standVon = (partie, p, f) => {
+  const z = partie.zustand?.[f];
+  return z && p.einsaetze[f] && z.ev === p.einsaetze[f].ev.id ? z.stand : null;
+};
+const STAND = { SPENT: 'bei der Mint schon ausgegeben', TEILWEISE: 'bei der Mint teilweise ausgegeben',
+  PENDING: 'bei der Mint in Bearbeitung (PENDING)' };
+
+// NUT-07 für alle Proofs der gezählten Einsätze (über die Y aus pruefeEinsatz). Eine Anfrage je
+// Partie zur Zeit. Ergebnis: true, wenn die Mint geantwortet hat.
+async function frageMint(partie, p) {
+  const farben = ['w', 'b'].filter((f) => p.einsaetze[f]);
+  partie.frage = true;
+  try {
+    const st = await mintZugang.pruefeZustaende(p.einsatz.mint, farben.flatMap((f) => p.einsaetze[f].proofs.map((x) => x.Y)));
+    const z = { ...(partie.zustand ?? {}), fehler: null };
+    let i = 0;
+    for (const f of farben) {
+      const s = st.slice(i, i += p.einsaetze[f].proofs.length);
+      z[f] = { ev: p.einsaetze[f].ev.id, stand: s.every((x) => x === 'UNSPENT') ? 'UNSPENT' : s.every((x) => x === 'SPENT') ? 'SPENT'
+        : s.includes('PENDING') ? 'PENDING' : 'TEILWEISE' };
+    }
+    partie.zustand = z;
+    return true;
+  } catch (e) {
+    partie.zustand = { ...(partie.zustand ?? {}), fehler: e.message };
+    return false;
+  } finally {
+    partie.frage = false; partie.zustandZeit = Date.now(); plane();
+  }
+}
+
+// Während der Partie und nach dem ergebnis: Stand bei der Mint höchstens alle 2 Minuten
+function zustandPflegen(partie, p) {
+  if (!p.mintSchluessel || partie.frage || !(p.einsaetze.w || p.einsaetze.b)) return;
+  if (Date.now() - partie.zustandZeit >= ZUSTAND_ALLE) frageMint(partie, p);
+}
+
+// Ist eine Einsatz-Partie nach dem ergebnis erledigt? Wenn die Sperrfrist vorbei ist oder alle
+// gezählten Einsätze bei der Mint ausgegeben sind (ohne Schlüssel der Mint unbekannt: nein).
+function einsatzErledigt(partie, p, t) {
+  if (t > p.create.created_at + SPERRFRIST) return true;
+  if (!p.mintSchluessel) return false;
+  return ['w', 'b'].every((f) => !p.einsaetze[f] || standVon(partie, p, f) === 'SPENT');
+}
+
+// Grund, warum gerade kein start geht: anzeigen und einmal ins Protokoll
+function merkeGrund(partie, text) {
+  if (partie.grund === text) return;
+  partie.grund = text;
+  if (text) hinweis(`${partie.g} · ${text}`);
+}
+
+// start in einer Einsatz-Partie: nur mit Schlüsseln der Mint, mit beiden Einsätzen gezählt, solange
+// bis zur Sperrfrist noch START_VORLAUF bleibt, und wenn die Mint unmittelbar davor alle Proofs
+// beider Einsätze als UNSPENT meldet (höchstens alle 10 s gefragt)
+function startMitEinsatz(partie, p, t) {
+  if (!p.mintSchluessel || !p.einsaetze.w || !p.einsaetze.b) return;
+  const vorlauf = () => `kein start: bis zur Sperrfrist bleiben weniger als ${START_VORLAUF / 3600} h`;
+  if (t > p.create.created_at + SPERRFRIST - START_VORLAUF) return merkeGrund(partie, vorlauf());
+  if (partie.frage || Date.now() - partie.startVersuch < START_PRUEFEN_ALLE) return;
+  partie.startVersuch = Date.now();
+  frageMint(partie, p).then((geantwortet) => {
+    const t2 = jetzt(), q = bauePartie(partie, t2);
+    partie.p = q;
+    if (!q || q.start || q.ende || q.ergebnis || gesendet.has(`start:${q.g}`) || !q.mintSchluessel || !q.einsaetze.w || !q.einsaetze.b) return;
+    if (t2 > q.create.created_at + SPERRFRIST - START_VORLAUF) return merkeGrund(partie, vorlauf());
+    if (!geantwortet) return merkeGrund(partie, `kein start: Mint nicht erreichbar (${partie.zustand?.fehler})`);
+    const nicht = ['w', 'b'].filter((f) => standVon(partie, q, f) !== 'UNSPENT');
+    if (nicht.length) {
+      return merkeGrund(partie, 'kein start: ' + nicht.map((f) => `Einsatz von ${FARBE[f]} ${STAND[standVon(partie, q, f)] ?? 'unbekannt'}`).join(', '));
+    }
+    merkeGrund(partie, null);
+    sendeStart(partie, q, t2);
+  });
+}
+
+// Wie viele Freigaben hat dieser Schiri schon für den Einsatz von `f` gesendet?
+const freigabenFuer = (p, f) => p.antraege.filter((a) => a.gueltig && a.einsatz === f && gesendet.has(`freigabe:${a.ev.id}`)).length;
+
+// Für jeden gültigen Antrag genau eine freigabe, höchstens FREIGABEN_JE_EINSATZ je Einsatz, und nur,
+// wenn die Mint die Proofs des Einsatzes unmittelbar davor als UNSPENT meldet. Ist der Einsatz schon
+// ausgegeben, ist die Auszahlung erledigt.
+function freigeben(partie, p) {
+  if (!p.mintSchluessel) return;
+  for (const a of p.antraege) {
+    if (a.gueltig || partie.hinweise.has(`antrag:${a.ev.id}`)) continue;
+    partie.hinweise.add(`antrag:${a.ev.id}`);
+    hinweis(`${partie.g} · Antrag ${a.ev.id.slice(0, 8)} von ${FARBE[farbeVon(p, a.ev.pubkey)] ?? '?'} ungültig, keine Freigabe: ${a.grund}`);
+  }
+  if (partie.frage) return;
+  const offen = (q) => q.antraege.filter((a) => a.gueltig && !gesendet.has(`freigabe:${a.ev.id}`)
+    && !['SPENT', 'TEILWEISE'].includes(standVon(partie, q, a.einsatz)) && !grenzeErreicht(partie, q, a.einsatz));
+  if (!offen(p).length) return;
+  if (partie.freigabeVersuch && Date.now() - partie.freigabeVersuch < FREIGABE_PRUEFEN_ALLE) return;
+  partie.freigabeVersuch = Date.now();
+  frageMint(partie, p).then((geantwortet) => {
+    const q = bauePartie(partie, jetzt());
+    partie.p = q;
+    if (!geantwortet || !q?.ergebnis || !q.mintSchluessel) return;
+    let warten = false;
+    for (const a of offen(q)) {
+      if (gesendet.has(`freigabe:${a.ev.id}`) || grenzeErreicht(partie, q, a.einsatz)) continue;
+      if (standVon(partie, q, a.einsatz) !== 'UNSPENT') { warten = true; continue; } // PENDING: später noch einmal
+      sende(partie, `freigabe für Antrag ${a.ev.id.slice(0, 8)} (Einsatz ${FARBE[a.einsatz]}, an ${FARBE[a.farbe]})`, {
+        kind: KIND, created_at: Math.max(jetzt(), a.ev.created_at),
+        tags: [['t', TAG], ['g', q.g], ['e', a.ev.id]],
+        content: JSON.stringify({ t: 'freigabe', sig: signiereNachricht(a.nachricht, sk) }),
+      });
+    }
+    if (!warten) partie.freigabeVersuch = 0; // nur nach einem Hindernis 10 s warten
+  });
+}
+
+// Grenze gegen Flut; beim ersten Erreichen ein Hinweis
+function grenzeErreicht(partie, p, f) {
+  if (freigabenFuer(p, f) < FREIGABEN_JE_EINSATZ) return false;
+  if (!partie.hinweise.has(`grenze:${f}`)) {
+    partie.hinweise.add(`grenze:${f}`);
+    hinweis(`${partie.g} · Grenze von ${FREIGABEN_JE_EINSATZ} Freigaben für den Einsatz von ${FARBE[f]} erreicht, keine weitere Freigabe`);
+  }
+  return true;
 }
 
 // Lebenszeichen (kind 14664, ersetzbar): jede Minute, nicht in IndexedDB und nicht im Protokoll
@@ -612,15 +898,21 @@ document.addEventListener('visibilitychange', () => {
 // --- Übersicht ---------------------------------------------------------------
 const FARBE = { w: 'Weiß', b: 'Schwarz' };
 const ART = { matt: 'Matt', remis: 'Remis', aufgabe: 'Aufgabe', zeit: 'Zeit', abbruch: 'Abbruch',
-  doppelzug: 'Doppelzug', annulliert: 'Annulliert' };
+  doppelzug: 'Doppelzug', annulliert: 'Annulliert', 'nicht-bezahlt': 'Nicht bezahlt' };
+const farbeVon = (p, wer) => (wer === p.spieler.w ? 'w' : wer === p.spieler.b ? 'b' : null);
 
 function statusVon(p) {
   if (p.ende) {
     const { art, verlierer } = p.ende;
-    return (ART[art] ?? art) + (verlierer ? ` – ${FARBE[verlierer === 'w' ? 'b' : 'w']} gewinnt` : '')
-      + (p.ergebnis ? ' (gemeldet)' : '');
+    const wer = art === 'nicht-bezahlt' ? (verlierer ? ` – ${FARBE[verlierer]} hat nicht bezahlt` : ' – beide haben nicht bezahlt')
+      : verlierer ? ` – ${FARBE[verlierer === 'w' ? 'b' : 'w']} gewinnt` : '';
+    return (ART[art] ?? art) + wer + (p.ergebnis ? ' (gemeldet)' : '');
   }
   if (!p.join) return 'wartet auf Gegner';
+  if (!p.start && p.einsatz) {
+    if (!p.mintSchluessel) return 'Schlüssel der Mint fehlen';
+    if (!p.einsaetze.w || !p.einsaetze.b) return 'wartet auf Einsätze';
+  }
   if (!p.start) return 'wartet auf start';
   if (p.ausstehend) return `Zug ${p.ausstehend.c.ply} wartet auf ack`;
   return `${FARBE[p.chess.turn()]} am Zug`;
@@ -642,7 +934,8 @@ function tabelle(sel, liste, leer) {
     zelle(tr, leer, 'muted').colSpan = 8;
     tbody.append(tr);
   }
-  for (const { g, p, aktion, bereit } of liste) {
+  for (const partie of liste) {
+    const { g, p, aktion, bereit } = partie;
     const tr = document.createElement('tr');
     tr.dataset.g = g;
     zelle(tr, g, 'mono id');
@@ -653,8 +946,80 @@ function tabelle(sel, liste, leer) {
     zelle(tr, bereit || p.ende ? statusVon(p) : 'wartet auf ein Relay (EOSE)', 'status');
     zelle(tr, aktion || '–', 'aktion muted');
     tbody.append(tr);
+    // Zweite Zeile: Einsatz (in Einsatz-Partien) und eigene Events mit ihren Bestätigungen
+    const zeilen = details(partie, p);
+    if (zeilen.length) {
+      tr.classList.add('has-details');
+      const zweite = document.createElement('tr');
+      zweite.className = 'details'; zweite.dataset.details = g;
+      const td = zelle(zweite, '', ''); td.colSpan = 8;
+      for (const [text, klasse] of zeilen) {
+        const div = document.createElement('div');
+        div.textContent = text; div.className = klasse;
+        td.append(div);
+      }
+      tbody.append(zweite);
+    }
   }
   table.append(tbody);
+}
+
+// Gründe ungültiger einsatz-Events, je Satz Mint-Schlüssel (pruefeEinsatz prüft DLEQ, also merken)
+const grundCache = new WeakMap();
+function einsatzGrund(ev, p) {
+  if (!grundCache.has(p.mintSchluessel)) grundCache.set(p.mintSchluessel, new Map());
+  const c = grundCache.get(p.mintSchluessel);
+  if (!c.has(ev.id)) c.set(ev.id, pruefeEinsatz(ev, p, p.mintSchluessel).grund ?? null);
+  return c.get(ev.id);
+}
+
+// Stand des Einsatzes eines Spielers: „fehlt (noch m:ss)“, „gültig“, „ungültig: <grund>“, „bei der Mint ausgegeben“
+function einsatzStand(partie, p, f, t) {
+  if (!p.mintSchluessel) return 'unbekannt (Schlüssel der Mint fehlen)';
+  if (p.einsaetze[f]) {
+    const s = standVon(partie, p, f);
+    return s === 'SPENT' || s === 'TEILWEISE' ? 'bei der Mint ausgegeben' : s === 'PENDING' ? 'gültig (bei der Mint in Bearbeitung)' : 'gültig';
+  }
+  const ev = (evsVon.get(p.g) ?? []).filter((e) => e.c?.t === 'einsatz' && e.pubkey === p.spieler[f])
+    .sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : 1))[0];
+  if (ev) return `ungültig: ${einsatzGrund(ev, p)}`;
+  const rest = p.join.created_at + ZAHLFRIST - t;
+  return rest > 0 && !p.start ? `fehlt (noch ${mmss(rest)})` : 'fehlt';
+}
+
+// Zeilen [text, klasse] unter einer Partie
+function details(partie, p) {
+  const zeilen = [], t = jetzt();
+  if (p.einsatz) {
+    const m = mints.get(p.einsatz.mint);
+    zeilen.push([`Einsatz ${p.einsatz.betrag} sat · Mint ${mintName(p.einsatz.mint)} · `
+      + (p.mintSchluessel ? `Schlüssel geladen${m?.fehler ? ` (zuletzt nicht erreichbar: ${m.fehler})` : ''}`
+        : `Schlüssel fehlen${m?.fehler ? ` (${m.fehler})` : ''}, keine Geldaktionen`), p.mintSchluessel ? 'einsatz-mint' : 'einsatz-mint warn']);
+    if (p.join) zeilen.push([`Weiß: ${einsatzStand(partie, p, 'w', t)} · Schwarz: ${einsatzStand(partie, p, 'b', t)}`, 'einsatz-stand']);
+    if (partie.grund && !p.start && !p.ergebnis) zeilen.push([partie.grund, 'einsatz-grund warn']);
+    const recht = anspruch(p);
+    if (recht) {
+      const was = (f) => (recht[f].length ? recht[f].map((e) => `Einsatz ${FARBE[e.farbe]}`).join(' und ') : 'nichts');
+      zeilen.push([`Anspruch: Weiß: ${was('w')} · Schwarz: ${was('b')}`, 'einsatz-anspruch']);
+      zeilen.push(['Anträge: ' + (p.antraege.length ? p.antraege.map((a) => {
+        const von = FARBE[farbeVon(p, a.ev.pubkey)];
+        if (!a.gueltig) return `${a.ev.id.slice(0, 8)} von ${von}: ungültig: ${a.grund}`;
+        const s = standVon(partie, p, a.einsatz);
+        const weiter = gesendet.has(`freigabe:${a.ev.id}`) ? 'freigegeben'
+          : s === 'SPENT' || s === 'TEILWEISE' ? 'keine Freigabe (Einsatz schon eingelöst)'
+            : freigabenFuer(p, a.einsatz) >= FREIGABEN_JE_EINSATZ ? `keine Freigabe (Grenze von ${FREIGABEN_JE_EINSATZ} erreicht)` : 'Freigabe folgt';
+        return `${a.ev.id.slice(0, 8)} von ${von} (Einsatz ${FARBE[a.einsatz]}): gültig, ${weiter}`;
+      }).join(' · ') : 'keine'), 'einsatz-antraege']);
+      const eingeloest = ['w', 'b'].filter((f) => p.einsaetze[f]).map((f) => {
+        const s = standVon(partie, p, f);
+        return `Einsatz ${FARBE[f]} ${s === 'SPENT' ? 'bei der Mint eingelöst' : s === 'TEILWEISE' ? 'teilweise eingelöst' : s ? 'noch nicht eingelöst' : 'Stand bei der Mint unbekannt'}`;
+      });
+      if (eingeloest.length) zeilen.push([eingeloest.join(' · '), 'einsatz-eingeloest']);
+    }
+  }
+  const eigene = [...bestaetigungen.values()].filter((b) => b.g === p.g).sort((a, b) => a.seit - b.seit);
+  if (eigene.length) zeilen.push(['Eigene Events: ' + eigene.map((b) => `${b.name} · ${b.ok.size}/${RELAYS.length}`).join(', '), 'eigene muted']);
+  return zeilen;
 }
 
 function zeigeProtokoll() {
@@ -663,9 +1028,10 @@ function zeigeProtokoll() {
   for (const e of protokoll.slice(0, 200)) {
     const li = document.createElement('li');
     if (e.hinweis) { li.textContent = `${e.zeit} · ${e.text}`; li.className = 'muted'; ol.append(li); continue; }
+    const b = e.b, ok = b?.ok.size ?? 0;
     li.textContent = `${e.zeit} · ${e.g} · ${e.text}` + (e.gespeichert === false ? ' · nicht in IndexedDB gespeichert' : '')
-      + (e.ok === null ? ' · wird gesendet …'
-        : e.ok ? ` · an ${e.ok} von ${RELAYS.length} Relays` : ' · kein Relay hat es angenommen');
+      + (!b || (!ok && b.laeuft.size) ? ' · wird gesendet …'
+        : ok ? ` · an ${ok} von ${RELAYS.length} Relays` : ' · kein Relay hat es bestätigt');
     ol.append(li);
   }
 }
@@ -675,8 +1041,12 @@ const meinePartien = () => [...partien.values()].filter((x) => x.p && x.p.schiri
 
 function zeige() {
   const meine = meinePartien().sort((a, b) => b.p.letzte - a.p.letzte);
-  tabelle('#laufend', meine.filter((x) => !x.p.ende), 'Keine laufenden Partien.');
+  const laufend = meine.filter((x) => !x.p.ende);
+  tabelle('#laufend', laufend, 'Keine laufenden Partien.');
   tabelle('#beendet', meine.filter((x) => x.p.ende), 'Keine beendeten Partien.');
+  // Summe der gezählten Einsätze in laufenden Partien
+  const summe = laufend.reduce((s, x) => s + (x.p.einsaetze.w?.summe ?? 0) + (x.p.einsaetze.b?.summe ?? 0), 0);
+  $('#einsaetze').textContent = `Einsätze in laufenden Partien: ${summe} sat`;
 }
 
 // --- Start -------------------------------------------------------------------
