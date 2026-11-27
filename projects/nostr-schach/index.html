@@ -75,8 +75,27 @@
   #zuege .wartet { color: var(--muted); font-style: italic; }
   .versteckt { display: none !important; }
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 16px 16px; }
-  input[type=text] { font: inherit; width: 100%; padding: 7px 9px; border-radius: 7px;
+  input[type=text], input[type=number], textarea, select { font: inherit; width: 100%; padding: 7px 9px; border-radius: 7px;
                      border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  input.zahl { width: 7em; } select { width: auto; max-width: 100%; }
+  textarea.mono { resize: vertical; }
+  .hinweis.ok { border: 1px solid var(--ok); color: var(--ok); }
+  /* Wallet (wallet-ui.js) und Einsatz (einsatz.js) */
+  #wallet details { border-top: 1px solid var(--line); padding: 6px 0; }
+  #wallet summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  #wallet details > :not(summary) { margin-top: 6px; }
+  #wallet .mints details.mint summary { display: flex; gap: 6px; align-items: center; font-weight: 400; }
+  #wallet .mint .betrag { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .spielgeld { font-size: 11px; font-weight: 700; color: #fff; background: var(--dunkel); border-radius: 5px; padding: 0 5px; }
+  .qr svg { width: min(100%, 220px); display: block; margin: 0 auto; border-radius: 6px; }
+  ul.liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+  ul.liste li { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .warn { color: var(--warn); }
+  #einsatz-info { margin: 8px auto 0; max-width: 560px; display: grid; gap: 4px; font-size: 14px; }
+  #einsatz-info .einsatz-kopf, #einsatz-info .geld-ergebnis { font-weight: 600; }
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); max-width: 460px; }
+  dialog::backdrop { background: rgba(0, 0, 0, .45); }
+  dialog h2 { margin: 0 0 8px; font-size: 16px; }
 </style>
 </head>
 <body>
@@ -101,9 +120,25 @@
         <span class="muted">Schiri <span id="schiri-standard" class="mono"></span></span>
         <span id="schiri-standard-status" class="muted"></span>
       </div>
+      <div class="reihe" style="margin-top:8px" id="einsatz-wahl">
+        <span class="muted">Einsatz</span>
+        <label><input type="radio" name="einsatz" value="0" checked> ohne</label>
+        <label><input type="radio" name="einsatz" value="100"> 100 sat</label>
+        <label><input type="radio" name="einsatz" value="500"> 500 sat</label>
+        <label><input type="radio" name="einsatz" value="1000"> 1.000 sat</label>
+      </div>
+      <div id="einsatz-mint-reihe" class="reihe versteckt" style="margin-top:6px">
+        <span class="muted">Mint</span> <select id="einsatz-mint"></select>
+      </div>
+      <p id="einsatz-gesperrt" class="hinweis warn versteckt"></p>
+      <p id="einsatz-guthaben" class="hinweis warn versteckt"><span></span>
+        <button id="btn-einsatz-aufladen">Aufladen</button></p>
+      <p id="einsatz-hinweis" class="hinweis versteckt"></p>
       <p id="schiri-hinweis" class="hinweis warn versteckt">Der Schiri ist gerade nicht online. Du kannst
         die Partie trotzdem anlegen, sie beginnt aber erst mit seinem Start (ohne Start ist sie nach
-        10 Minuten annulliert).</p>
+        10 Minuten annulliert).<span id="schiri-hinweis-einsatz" class="versteckt"> Mit Einsatz heißt das: Ohne
+        Schiri gibt es keinen Start, und das Geld kommt erst nach seinem Ergebnis bzw. nach der Sperrfrist
+        (24 h) zurück.</span></p>
       <p class="muted">Mit Schiri bestätigt der Schiri jeden Zug, die Uhr läuft nach seinen Zeiten, und
         sein Ergebnis ist verbindlich. Nach dem Anlegen bekommst du einen Link für deinen Gegner. Offene Partien
         erscheinen auch unten für alle, die die Seite gerade geöffnet haben.</p>
@@ -127,7 +162,11 @@
         <span id="uhr-unten" class="uhr"></span>
       </div>
       <div id="status"></div>
+      <div id="einsatz-info" class="versteckt"></div>
       <p id="abweichung" class="hinweis warn versteckt"></p>
+      <p id="beitreten-hinweis" class="hinweis versteckt" style="text-align:center"><span></span>
+        <button id="btn-beitreten-aufladen" class="versteckt">Aufladen</button>
+        <button id="btn-beitreten-umbuchen" class="versteckt">Umbuchen</button></p>
       <div class="reihe" style="justify-content:center; margin-top:8px">
         <button id="btn-beitreten" class="primaer versteckt">Partie beitreten</button>
         <button id="btn-link">Link teilen</button>
@@ -153,6 +192,9 @@
         eine Erweiterung (NIP-07) nutzen.</p>
     </div>
 
+    <!-- Wallet-Kasten (wallet-ui.js) -->
+    <div id="wallet" class="karte"></div>
+
     <div class="karte">
       <h2>Relays</h2>
       <div id="relays" style="display:grid; gap:4px"></div>
@@ -166,15 +208,18 @@
 </main>
 
 <!-- Der Release-Workflow ersetzt "dev" in der Kopie im Artefakt durch die Version (vX.Y.Z). -->
-<footer>Nostr-Schach <span id="version">v0.1.9</span></footer>
+<footer>Nostr-Schach <span id="version">v0.1.13</span></footer>
 
 <script type="module">
 import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19 } from 'nostr-tools';
 import { Chess } from 'chess.js';
 import { KIND, KIND_ACK, KIND_LEBENSZEICHEN, TAG, ZEITKONTROLLE, ABBRUCH_NACH, gueltigeId, partieVon, lies, baue as baueAus } from './regeln.js';
+import { starteWallet, frage, mintText } from './wallet-ui.js';
+import { starteEinsatz } from './einsatz.js';
 
 // Protokoll und Regeln stehen in regeln.js, Relays, Import-Map und Standard-Schiri in einstellungen.js.
-const { RELAYS, SCHIRI } = window.EINSTELLUNGEN;
+// Wallet-Kasten in wallet-ui.js, Ablauf der Einsatz-Partien in einsatz.js (Geldlogik in cashu.js).
+const { RELAYS, SCHIRI, MINTS, MINT } = window.EINSTELLUNGEN;
 const ONLINE_BIS = 180;     // s; so alt darf das letzte Lebenszeichen sein, damit der Schiri „online“ ist
 const ERNEUT_NACH = 10_000; // ms; eigener Zug ohne ack wird danach erneut gesendet (gleiches Event)
 const LS_SK = 'nostr-schach.sk';
@@ -193,6 +238,18 @@ const ls = {
   del(k) { try { localStorage.removeItem(k); } catch {} },
 };
 
+// --- Wallet und Einsatz ----------------------------------------------------
+// Wallet-Kasten (wallet-ui.js) und Ablauf der Einsatz-Partien (einsatz.js). Beide bekommen nur, was
+// sie brauchen; Identität, Events und Senden bleiben hier.
+const W = starteWallet({ kasten: $('#wallet'), aufAenderung: () => { zeigeEinsatzWahl(); if (aktuell) zeichne(); } });
+const E = starteEinsatz({
+  W, baue, jetzt, pk: () => pk,
+  // Einsatz und Antrag signiert die Seite mit dem eigenen Schlüssel (mit NIP-07 gibt es keine Einsätze)
+  signiere: (vorlage) => finalizeEvent({ created_at: jetzt(), tags: [], ...vorlage, kind: KIND }, sk),
+  sende: sendeSigniert,
+  neuZeichnen: () => planeNeuzeichnen(),
+});
+
 // --- Identität -------------------------------------------------------------
 let sk = null, pk = null, nip07 = false;
 
@@ -208,11 +265,14 @@ async function identitaetLaden() {
   zeigeIch();
 }
 
+// Nach jedem Wechsel der Identität: Anzeige, Wallet des neuen Schlüssels, eigene Einsatz-Partien
 function zeigeIch() {
   $('#ich').textContent = nip19.npubEncode(pk);
   $('#ich-art').textContent = nip07 ? 'Über Browser-Erweiterung (NIP-07)' : 'Lokaler Schlüssel in diesem Browser';
   $('#btn-export').disabled = nip07;
   $('#btn-nip07').classList.toggle('versteckt', !window.nostr || nip07);
+  W.setzeIdentitaet({ sk, pk });
+  abonniereEigene();
   if (aktuell) zeichne();
   zeigeLobby();
 }
@@ -223,22 +283,26 @@ async function signiere(vorlage) {
   return finalizeEvent(ev, sk);
 }
 
-$('#btn-neu').onclick = () => {
-  if (!confirm('Neue Identität erzeugen? Der bisherige lokale Schlüssel geht verloren, wenn du ihn nicht gesichert hast.')) return;
+// Kein Geld verlieren beim Wechsel: Hat die Wallet Guthaben, gesperrte Einsätze oder offene Vorgänge,
+// fragt W.vorWechsel nach (mit Backup). Ergebnis: null (nichts in der Wallet), true (weiter), false.
+const zeigeNsec = () => { if (sk) prompt('Dein geheimer Schlüssel (sicher aufbewahren, niemandem zeigen):', nip19.nsecEncode(sk)); };
+$('#btn-neu').onclick = async () => {
+  const w = await W.vorWechsel(zeigeNsec);
+  if (w === false) return;
+  if (w === null && !confirm('Neue Identität erzeugen? Der bisherige lokale Schlüssel geht verloren, wenn du ihn nicht gesichert hast.')) return;
   ls.del(LS_NIP07); sk = generateSecretKey(); ls.set(LS_SK, hex(sk)); pk = getPublicKey(sk); nip07 = false; zeigeIch();
 };
-$('#btn-import').onclick = () => {
+$('#btn-import').onclick = async () => {
+  if (await W.vorWechsel(zeigeNsec) === false) return;
   const s = prompt('nsec eingeben:'); if (!s) return;
   try {
     const d = nip19.decode(s.trim()); if (d.type !== 'nsec') throw 0;
     ls.del(LS_NIP07); sk = d.data; ls.set(LS_SK, hex(sk)); pk = getPublicKey(sk); nip07 = false; zeigeIch();
   } catch { alert('Das ist kein gültiger nsec.'); }
 };
-$('#btn-export').onclick = () => {
-  if (!sk) return;
-  prompt('Dein geheimer Schlüssel (sicher aufbewahren, niemandem zeigen):', nip19.nsecEncode(sk));
-};
+$('#btn-export').onclick = zeigeNsec;
 $('#btn-nip07').onclick = async () => {
+  if (await W.vorWechsel(zeigeNsec) === false) return;
   try { pk = await window.nostr.getPublicKey(); nip07 = true; sk = null; ls.set(LS_NIP07, '1'); zeigeIch(); }
   catch { alert('Die Erweiterung hat den Zugriff abgelehnt.'); }
 };
@@ -267,6 +331,18 @@ async function sende(vorlage) {
     ? `Gesendet an ${ok} von ${RELAYS.length} Relays.`
     : 'Kein Relay hat das Event angenommen – Verbindung prüfen.';
   return ev;
+}
+// Schon signiertes Event (einsatz, antrag aus einsatz.js) anzeigen und an alle Relays senden; nach
+// einem Neuladen geht so dasselbe Event (gleiche ID) noch einmal raus
+function sendeSigniert(ev) {
+  gesendetUm.set(ev.id, Date.now());
+  verarbeite({ ...ev });
+  Promise.allSettled(pool.publish(RELAYS, roh(ev))).then((r) => {
+    const ok = r.filter((x) => x.status === 'fulfilled').length;
+    const art = (() => { try { return JSON.parse(ev.content).t; } catch { return 'Event'; } })();
+    $('#sende-info').textContent = ok ? `${art === 'einsatz' ? 'Einsatz' : art === 'antrag' ? 'Antrag' : art} an ${ok} von ${RELAYS.length} Relays gesendet.`
+      : 'Kein Relay hat das Event angenommen – Verbindung prüfen.';
+  });
 }
 
 // Schiri-Partie: Hat der eigene ausstehende Zug nach 10 s noch keinen ack, geht dasselbe Event
@@ -324,6 +400,7 @@ function zeigeSchiriStatus() {
   $('#schiri-standard-status').textContent = st.text;
   $('#schiri-standard-status').className = st.online ? 'online' : 'offline';
   $('#schiri-hinweis').classList.toggle('versteckt', st.online || !$('#mit-schiri').checked);
+  $('#schiri-hinweis-einsatz').classList.toggle('versteckt', !einsatzBetrag());
   const kopf = $('#schiri-kopf');
   const p = aktuell ? baue(aktuell) : null;
   kopf.innerHTML = '';
@@ -331,7 +408,7 @@ function zeigeSchiriStatus() {
   if (!p.schiri) { kopf.textContent = 'Partie ohne Schiri (Uhr nach den Zeitstempeln der Spieler)'; return; }
   const teil = (text, klasse) => { const el = document.createElement('span'); el.textContent = text; if (klasse) el.className = klasse; kopf.append(el); };
   const sp = schiriStatus(p.schiri);
-  teil('Schiri-Partie · Schiri ');
+  teil(p.einsatz ? 'Schiri-Partie mit Einsatz · Schiri ' : 'Schiri-Partie · Schiri ');
   teil(kurz(p.schiri), 'mono');
   if (p.schiri !== SCHIRI) teil(' · nicht der Standard-Schiri', 'fremd');
   teil(' · ');
@@ -347,6 +424,7 @@ const partienIds = new Set();       // alle bekannten Partie-IDs
 function verarbeite(ev) {
   if (events.has(ev.id) || !lies(ev)) return;
   events.set(ev.id, ev); partienIds.add(partieVon(ev));
+  E.neuesEvent(ev);
   planeNeuzeichnen();
 }
 
@@ -357,8 +435,16 @@ function planeNeuzeichnen() {
 }
 
 // Partie aus allen Events nachbauen und dabei jeden Zug prüfen (Regeln in regeln.js). Die Uhr
-// rechnet baue() aus den Zeitstempeln der Events und der aktuellen Zeit.
-const baue = (g) => baueAus([...events.values()].filter((e) => partieVon(e) === g), jetzt());
+// rechnet baue() aus den Zeitstempeln der Events und der aktuellen Zeit. In Einsatz-Partien mit den
+// Schlüsseln der Mint (einsatz.js lädt sie beim ersten Bedarf), sonst ist der Zahlungsstand unbekannt.
+// `ohneMint`: für die Lobby, dort fragt die Seite keine Mint an.
+function baue(g, { ohneMint = false } = {}) {
+  const evs = [...events.values()].filter((e) => partieVon(e) === g);
+  const p = baueAus(evs, jetzt());
+  if (!p?.einsatz || ohneMint) return p;
+  const k = E.schluessel(p.einsatz.mint);
+  return k ? baueAus(evs, jetzt(), k) : p;
+}
 
 // --- Lobby -----------------------------------------------------------------
 function meine() { try { return JSON.parse(ls.get(LS_MEINE) || '[]'); } catch { return []; } }
@@ -368,7 +454,7 @@ function zeigeLobby() {
   if (!pk) return;
   const offen = [], mein = [];
   for (const g of partienIds) {
-    const p = baue(g); if (!p) continue;
+    const p = baue(g, { ohneMint: true }); if (!p) continue;
     const beteiligt = p.spieler.w === pk || p.spieler.b === pk;
     if (beteiligt) mein.push(p);
     else if (!p.spieler.w || !p.spieler.b) offen.push(p);
@@ -377,7 +463,7 @@ function zeigeLobby() {
   offen.sort((a, b) => b.letzte - a.letzte); mein.sort((a, b) => b.letzte - a.letzte);
   liste('#offen', offen.slice(0, 15), 'Gerade keine offenen Partien – leg doch eine an.', (p) => {
     const farbe = p.create.c.farbe === 'w' ? 'Schwarz' : 'Weiß';
-    return [`${kurz(p.create.pubkey)} sucht Gegner · du spielst ${farbe} · ${schiriText(p)}`, 'Ansehen'];
+    return [`${kurz(p.create.pubkey)} sucht Gegner · du spielst ${farbe}${einsatzText(p)} · ${schiriText(p)}`, 'Ansehen'];
   });
   liste('#meine', mein.slice(0, 15), 'Noch keine.', (p) => {
     if (p.nurId) return [`Partie ${p.g} (lädt …)`, 'Öffnen'];
@@ -385,13 +471,15 @@ function zeigeLobby() {
       : p.schiri && !p.start ? 'wartet auf den Schiri'
       : p.ausstehend ? 'Zug wartet auf Bestätigung'
       : (p.spieler[p.chess.turn()] === pk ? 'du bist am Zug' : 'Gegner am Zug');
-    return [`Partie ${p.g.slice(0, 6)} · ${p.zuege.length} Halbzüge · ${status} · ${schiriText(p)}`, 'Öffnen'];
+    return [`Partie ${p.g.slice(0, 6)} · ${p.zuege.length} Halbzüge · ${status}${einsatzText(p)} · ${schiriText(p)}`, 'Öffnen'];
   });
 }
 
-// Für die Lobby: ob die Partie einen Schiri hat und welchen
+// Für die Lobby: ob die Partie einen Schiri hat und welchen, und ihr Einsatz
 const schiriText = (p) => !p.schiri ? 'ohne Schiri'
   : `Schiri ${kurz(p.schiri)}${p.schiri === SCHIRI ? '' : ' (nicht der Standard-Schiri)'}`;
+const einsatzText = (p) => !p.einsatz ? ''
+  : ` · Einsatz ${p.einsatz.betrag} sat bei ${mintText(p.einsatz.mint)}`;
 
 function liste(sel, eintraege, leer, text) {
   const ul = $(sel); ul.innerHTML = '';
@@ -412,17 +500,91 @@ function abonniereLobby() {
     { onevent: verarbeite });
 }
 abonniereLobby();
+// Eigene Einsatz-Partien der letzten 2 Tage aus der Wallet (falls die Lobby sie nicht mehr liefert),
+// damit Bezahlen und Einlösen nach dem Neuladen weiterlaufen
+let eigeneSub = null;
+function abonniereEigene() {
+  eigeneSub?.close(); eigeneSub = null;
+  const gs = E.eigenePartien();
+  if (gs.length) eigeneSub = pool.subscribeMany(RELAYS, { kinds: [KIND], '#g': gs }, { onevent: verarbeite });
+}
+
+// --- Neue Partie mit Einsatz ---------------------------------------------------------------
+// Einsatz nur mit Schiri (die Auswahl schaltet „Schiri-Partie“ fest ein), nur mit dem Schlüssel in
+// der Seite (Cashu signiert mit P2PK) und nur bei Mints mit genug Guthaben
+const einsatzBetrag = () => Number(document.querySelector('[name=einsatz]:checked')?.value || 0);
+function zeigeEinsatzWahl() {
+  const kann = W.kannSignieren(), darf = W.darfGeldBewegen();
+  for (const r of document.querySelectorAll('[name=einsatz]')) {
+    r.disabled = r.value !== '0' && (!kann || !darf);
+    if (r.disabled && r.checked) document.querySelector('[name=einsatz][value="0"]').checked = true;
+  }
+  const betrag = einsatzBetrag();
+  const gesperrt = !kann ? 'Einsatz-Partien gehen nur mit einem Schlüssel in diesem Browser: Cashu braucht ihn für die '
+    + 'Signaturen. Mit der Browser-Erweiterung (NIP-07) kannst du keinen Einsatz wählen.'
+    : !darf ? 'Die Wallet ist in einem anderen Tab offen. Einsatz-Partien legst du dort an.' : '';
+  $('#einsatz-gesperrt').textContent = gesperrt;
+  $('#einsatz-gesperrt').classList.toggle('versteckt', !gesperrt);
+  $('#mit-schiri').disabled = !!betrag;
+  if (betrag) $('#mit-schiri').checked = true;
+  $('#einsatz-mint-reihe').classList.toggle('versteckt', !betrag);
+  $('#einsatz-hinweis').classList.toggle('versteckt', !betrag);
+  if (!betrag) { $('#einsatz-guthaben').classList.add('versteckt'); return zeigeSchiriStatus(); }
+  const sel = $('#einsatz-mint'), vorher = sel.value;
+  sel.replaceChildren(...MINTS.map((m) => {
+    const g = W.guthaben(m.url), o = document.createElement('option');
+    o.value = m.url; o.disabled = g < betrag;
+    o.textContent = `${mintText(m.url)} – ${g} sat${g < betrag ? ' · Guthaben zu klein' : ''}`;
+    return o;
+  }));
+  const moeglich = MINTS.filter((m) => W.guthaben(m.url) >= betrag);
+  sel.value = moeglich.some((m) => m.url === vorher) ? vorher : (moeglich.find((m) => m.url === MINT) ?? moeglich[0] ?? MINTS.find((m) => m.url === MINT) ?? MINTS[0]).url;
+  if (!moeglich.length) einsatzGuthabenHinweis(`Für ${betrag} sat Einsatz reicht das Guthaben bei keiner Mint.`, sel.value, betrag);
+  else if (!$('#einsatz-guthaben').dataset.fest) $('#einsatz-guthaben').classList.add('versteckt');
+  $('#einsatz-hinweis').textContent = `Schiri ${kurz(SCHIRI)} leitet die Partie. Er hält kein Geld, er gibt am Ende nur frei: `
+    + `Beide Einsätze sind bis zum Ende 2 von 3 gesperrt (Weiß, Schwarz, Schiri) und lassen sich spätestens nach 24 h `
+    + `vom Zahlenden allein zurückholen. Der Gewinner bekommt beide Einsätze (minus Gebühr der Mint).`;
+  zeigeSchiriStatus();
+}
+function einsatzGuthabenHinweis(text, url, betrag) {
+  const p = $('#einsatz-guthaben');
+  p.firstElementChild.textContent = text;
+  p.classList.remove('versteckt');
+  $('#btn-einsatz-aufladen').onclick = () => W.zeigeAufladen(url, Math.max(betrag * 2, 1000));
+}
+for (const r of document.querySelectorAll('[name=einsatz]')) r.onchange = () => { delete $('#einsatz-guthaben').dataset.fest; zeigeEinsatzWahl(); };
+$('#einsatz-mint').onchange = () => { delete $('#einsatz-guthaben').dataset.fest; zeigeEinsatzWahl(); };
 
 for (const btn of document.querySelectorAll('[data-farbe]')) {
   btn.onclick = async () => {
     let farbe = btn.dataset.farbe;
     if (farbe === 'z') farbe = Math.random() < 0.5 ? 'w' : 'b';
+    const betrag = einsatzBetrag();
+    let einsatz = [];
+    if (betrag) {
+      // Guthaben bei der Mint: mindestens Einsatz plus Tauschgebühr der Mint (input_fee_ppk)
+      if (!W.kannSignieren() || !W.darfGeldBewegen()) return zeigeEinsatzWahl();
+      const url = $('#einsatz-mint').value;
+      const knoepfe = document.querySelectorAll('[data-farbe]');
+      for (const b of knoepfe) b.disabled = true;
+      let r;
+      try { r = await W.wallet.einsatzMoeglich(url, betrag); }
+      catch (e) { r = { fehler: e.message }; }
+      finally { for (const b of knoepfe) b.disabled = false; }
+      if (!r.moeglich) {
+        $('#einsatz-guthaben').dataset.fest = '1';
+        return einsatzGuthabenHinweis(r.fehler ? `Die Mint ist gerade nicht erreichbar: ${r.fehler}`
+          : `Für ${betrag} sat Einsatz bei ${mintText(url)} brauchst du ${betrag + r.gebuehr} sat (Einsatz plus Tauschgebühr der Mint), `
+            + `du hast ${r.guthaben} sat.`, url, betrag + r.gebuehr - r.guthaben);
+      }
+      einsatz = [['einsatz', String(betrag)], ['mint', url]];
+    }
     const g = hex(crypto.getRandomValues(new Uint8Array(8)));
     // Schiri-Partie: Standard-Schiri im schiri- und (für sein Abo über #p) im p-Tag
-    const schiri = $('#mit-schiri').checked ? [['schiri', SCHIRI], ['p', SCHIRI]] : [];
+    const schiri = $('#mit-schiri').checked || betrag ? [['schiri', SCHIRI], ['p', SCHIRI]] : [];
     merke(g);
     location.hash = g;
-    await sende({ tags: [['t', TAG], ['g', g], ['time_control', ZEITKONTROLLE], ...schiri],
+    await sende({ tags: [['t', TAG], ['g', g], ['time_control', ZEITKONTROLLE], ...schiri, ...einsatz],
                   content: JSON.stringify({ t: 'create', farbe }) });
   };
 }
@@ -455,7 +617,7 @@ window.addEventListener('hashchange', () => oeffne(location.hash.slice(1)));
 // Beim Zurückkommen und regelmäßig neu abonnieren; doppelte Events werden über die ID verworfen.
 function auffrischen() {
   if (document.visibilityState !== 'visible') return;
-  abonniereLobby(); abonnierePartie(); abonniereLebenszeichen();
+  abonniereLobby(); abonnierePartie(); abonniereLebenszeichen(); abonniereEigene();
 }
 document.addEventListener('visibilitychange', auffrischen);
 window.addEventListener('pageshow', auffrischen);
@@ -480,13 +642,15 @@ function zeigeUhren(p, unten) {
 // der Stand ändert (z. B. Zeitverlust), damit ein Klick nicht zwischen zwei Brettern landet.
 let gezeichnet = null; // Stand der letzten Zeichnung
 const stand = (p) => JSON.stringify(p && [p.ende, p.uhr.amZug, p.ids, p.spieler, p.start?.id, p.ausstehend?.id,
-  p.ergebnis?.id, p.abweichung]);
+  p.ergebnis?.id, p.abweichung, !!p.mintSchluessel]);
 setInterval(() => {
+  E.takt(); // Einsatz sperren bzw. einlösen, in allen eigenen Einsatz-Partien
   if (!aktuell) return;
   const p = baue(aktuell);
   erneutSenden(p);
   if (stand(p) !== gezeichnet) return zeichne();
   zeigeUhren(p, p?.spieler.b === pk && p?.spieler.w !== pk ? 'b' : 'w');
+  E.zeichne($('#einsatz-info'), p); // Zahlfrist und Stand des Einlösens
 }, 1000);
 
 function zeichne() {
@@ -498,6 +662,7 @@ function zeichne() {
     $('#btn-beitreten').classList.add('versteckt'); $('#btn-aufgeben').disabled = true;
     $('#gegner-oben').textContent = $('#gegner-unten').textContent = ''; $('#zuege').textContent = '';
     $('#abweichung').classList.add('versteckt');
+    $('#einsatz-info').classList.add('versteckt'); $('#beitreten-hinweis').classList.add('versteckt');
     zeigeUhren(null);
     return;
   }
@@ -516,6 +681,17 @@ function zeichne() {
   const ichAmZug = komplett && !p.ende && !wartetAufStart && !p.ausstehend && p.spieler[p.chess.turn()] === pk;
   $('#btn-beitreten').classList.toggle('versteckt', !!komplett || !!meineFarbe);
   $('#btn-aufgeben').disabled = !meineFarbe || !komplett || !!p.ende;
+  // Einsatz-Partie: Beitreten nur mit dem Schlüssel in der Seite und mit der Wallet in diesem Tab
+  const beitretenMoeglich = !komplett && !meineFarbe;
+  const einsatzSperre = p.einsatz && beitretenMoeglich ? (!W.kannSignieren()
+    ? 'Mit der Browser-Erweiterung (NIP-07) kannst du keiner Einsatz-Partie beitreten: Cashu braucht den Schlüssel in der Seite.'
+    : !W.darfGeldBewegen() ? 'Die Wallet ist in einem anderen Tab offen. Beitreten kannst du dort.' : null) : null;
+  $('#btn-beitreten').disabled = !!einsatzSperre;
+  $('#btn-beitreten').textContent = p.einsatz ? `Partie beitreten (Einsatz ${p.einsatz.betrag} sat)` : 'Partie beitreten';
+  const bh = $('#beitreten-hinweis');
+  if (einsatzSperre) beitretenHinweis(einsatzSperre, { art: 'sperre' });
+  else if (bh.dataset.art === 'sperre' || !beitretenMoeglich || !p.einsatz || bh.dataset.g !== p.g) bh.classList.add('versteckt');
+  E.zeichne($('#einsatz-info'), p);
   zeigeSchiriStatus();
   if (p.schiri && !lzAutoren.split(',').includes(p.schiri)) abonniereLebenszeichen();
 
@@ -593,7 +769,7 @@ function zeichne() {
 const FARBE = { w: 'Weiß', b: 'Schwarz' };
 // Grund eines Endes, wie ihn der Schiri meldet
 const GRUND = { matt: 'Matt', remis: 'Remis', aufgabe: 'Aufgabe', zeit: 'Zeit', abbruch: 'Abbruch',
-  doppelzug: 'Doppelzug', annulliert: 'annulliert' };
+  doppelzug: 'Doppelzug', annulliert: 'annulliert', 'nicht-bezahlt': 'nicht bezahlt' };
 const endeKurz = (e) => (GRUND[e.art] ?? e.art) + (e.verlierer ? `, ${FARBE[e.verlierer]} verliert` : '');
 function endeText(e) {
   const gewinner = FARBE[e.verlierer === 'w' ? 'b' : 'w'], verlierer = FARBE[e.verlierer];
@@ -604,6 +780,8 @@ function endeText(e) {
     case 'zeit': return `${verlierer} hat die Zeit überschritten – ${gewinner} gewinnt.`;
     case 'abbruch': return `Partie abgebrochen: kein erster Zug innerhalb von ${ABBRUCH_NACH} s.`;
     case 'annulliert': return 'Partie annulliert: Der Schiri hat nicht rechtzeitig bestätigt.';
+    case 'nicht-bezahlt': return e.verlierer ? `${verlierer} hat den Einsatz nicht rechtzeitig bezahlt, die Partie hat nicht begonnen.`
+      : 'Keiner hat den Einsatz rechtzeitig bezahlt, die Partie hat nicht begonnen.';
     case 'remis': return 'Remis.';
     default: return `Partie beendet (${e.art}).`;
   }
@@ -635,9 +813,46 @@ async function klick(feld, p, ichAmZug) {
   zeichne();
 }
 
+function beitretenHinweis(text, { url = null, fehlt = 0, art = 'guthaben' } = {}) {
+  const p = $('#beitreten-hinweis');
+  p.firstElementChild.textContent = text;
+  p.dataset.g = aktuell; p.dataset.art = art;
+  p.classList.remove('versteckt');
+  $('#btn-beitreten-aufladen').classList.toggle('versteckt', !url);
+  $('#btn-beitreten-umbuchen').classList.toggle('versteckt', !url);
+  $('#btn-beitreten-aufladen').onclick = () => W.zeigeAufladen(url, Math.max(fehlt, 1000));
+  $('#btn-beitreten-umbuchen').onclick = () => W.zeigeUmbuchen(url, fehlt);
+}
 $('#btn-beitreten').onclick = async () => {
-  merke(aktuell);
-  await sende({ tags: [['t', TAG], ['g', aktuell]], content: JSON.stringify({ t: 'join' }) });
+  const g = aktuell, p = baue(g);
+  if (p?.einsatz) {
+    // Vorher Guthaben bei der Mint der Partie prüfen, dann bestätigen lassen
+    if (!W.kannSignieren() || !W.darfGeldBewegen()) return zeichne();
+    const { betrag, mint } = p.einsatz;
+    $('#btn-beitreten').disabled = true;
+    let r;
+    try { r = await W.wallet.einsatzMoeglich(mint, betrag); } catch (e) { r = { fehler: e.message }; }
+    finally { $('#btn-beitreten').disabled = false; }
+    if (r.fehler) return beitretenHinweis(`Die Mint ${mintText(mint)} ist gerade nicht erreichbar: ${r.fehler}`);
+    if (!r.moeglich) {
+      return beitretenHinweis(`Zu wenig Guthaben: Für ${betrag} sat Einsatz bei ${mintText(mint)} brauchst du ${betrag + r.gebuehr} sat `
+        + `(Einsatz plus Tauschgebühr der Mint), du hast dort ${r.guthaben} sat. Lade auf oder buche von einer anderen Mint um.`,
+      { url: mint, fehlt: betrag + r.gebuehr - r.guthaben });
+    }
+    $('#beitreten-hinweis').classList.add('versteckt');
+    const wahl = await frage({
+      titel: 'Partie mit Einsatz beitreten',
+      text: [`Einsatz: ${betrag} sat bei ${mintText(mint)}. Schiri: ${kurz(p.schiri)}${p.schiri === SCHIRI ? ' (Standard-Schiri)' : ' – nicht der Standard-Schiri'}.`,
+        'Nach dem Beitritt sperrt die Seite deinen Einsatz automatisch, 2 von 3 (du, dein Gegner, der Schiri). Der Schiri hält '
+        + 'kein Geld, er gibt am Ende nur frei: Der Gewinner bekommt beide Einsätze, bei Remis, Abbruch oder Annullierung jeder '
+        + 'seinen eigenen (jeweils minus Gebühr der Mint).',
+        'Gibt der Schiri nicht frei, holst du deinen Einsatz nach 24 h allein zurück. Lass die Seite offen, bis die Partie läuft.'],
+      knoepfe: [{ text: 'Beitreten und bezahlen', wert: 'ja', primaer: true }, { text: 'Abbrechen', wert: 'nein' }],
+    });
+    if (wahl !== 'ja' || aktuell !== g) return;
+  }
+  merke(g);
+  await sende({ tags: [['t', TAG], ['g', g]], content: JSON.stringify({ t: 'join' }) });
 };
 $('#btn-aufgeben').onclick = async () => {
   if (!confirm('Wirklich aufgeben?')) return;
@@ -657,6 +872,7 @@ $('#btn-lobby').onclick = () => { location.hash = ''; };
 
 // --- Start -----------------------------------------------------------------
 await identitaetLaden();
+zeigeEinsatzWahl();
 zeigeRelays();
 oeffne(location.hash.slice(1));
 abonniereLebenszeichen();
