@@ -21,6 +21,8 @@ const MINT_PAUSE = 10_000;      // ms; Schlüssel einer Mint nach einem Fehler e
 const ZWEI_TAGE = 2 * 86400;
 const FARBE = { w: 'Weiß', b: 'Schwarz' };
 const MIT_VERLIERER = ['matt', 'aufgabe', 'zeit', 'doppelzug'];
+// Warum jeder seinen eigenen Einsatz zurückbekommt
+const ANLASS = { remis: 'Remis', abbruch: 'Partie abgebrochen', annulliert: 'Partie annulliert', 'nicht-bezahlt': 'Gegner hat nicht bezahlt' };
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 const datum = (s) => new Date(s * 1000).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -148,6 +150,8 @@ export function starteEinsatz(ctx) {
             const r = await wallet.loeseEin(p, fr);
             a.eingeloest = true;
             a.betrag = r.betrag;
+            W.gutschrift({ url: p.einsatz.mint, betrag: r.betrag,
+              wofuer: `${MIT_VERLIERER.includes(p.ergebnis.c.art) ? 'Gewinn' : 'Erstattung'}, Partie ${g.slice(0, 6)}` });
           } catch (err) {
             if (!err?.mint) throw err; // unklar (Netz): später noch einmal
             // Tausch bei der Mint gescheitert: neuer Antrag, höchstens dreimal
@@ -182,6 +186,8 @@ export function starteEinsatz(ctx) {
     const fehlt = f && !W.kannSignieren() ? 'Mit der Browser-Erweiterung (NIP-07) kann diese Seite den Einsatz nicht sperren und nicht einlösen.'
       : f && !W.darfGeldBewegen() ? 'Geldaktionen sind in diesem Tab gesperrt (die Wallet ist in einem anderen Tab offen). Dort läuft das Bezahlen und Einlösen.' : null;
     if (fehlt) zeile(fehlt, 'hinweis warn');
+    const grund = !p.join ? W.mintGrund(url, 'einsatz') : null;
+    if (grund) zeile(`Hinweis: ${mintText(url)} kann gerade nicht alles (${grund}).`, 'hinweis warn mint-hinweis');
     if (!p.join) {
       if (f) zeile('Lass diese Seite offen: Sobald jemand beitritt, sperrt sie deinen Einsatz automatisch. Ist sie dann zu, '
         + 'gilt die Partie nach 10 Minuten als nicht bezahlt (es geht kein Geld verloren).', 'hinweis');
@@ -206,28 +212,10 @@ export function starteEinsatz(ctx) {
       if (rueckholbar) rueckholung(zeile, url, p.g, 'Der Schiri hat bis zum Ende der Sperrfrist kein Ergebnis gemeldet.');
       return;
     }
-    const { art, verlierer } = p.ergebnis.c;
-    const recht = anspruch(p) ?? { w: [], b: [] };
-    if (!f) {
-      zeile(MIT_VERLIERER.includes(art) ? `${FARBE[verlierer === 'w' ? 'b' : 'w']} bekommt den Topf.` : 'Jeder bekommt seinen eigenen Einsatz zurück.');
-      return;
-    }
-    const eigen = !!p.einsaetze[f];
-    const gutschrift = recht[f].reduce((s, e) => s + (st.antraege?.[e.farbe]?.betrag ?? (e.summe - e.gebuehr)), 0);
-    const fertig = !!st.fertig;
-    if (MIT_VERLIERER.includes(art)) {
-      if (verlierer === f) zeile(eigen ? `Verloren: −${betrag} sat` : 'Verloren.', 'geld-ergebnis');
-      else zeile(`Gewonnen: +${gutschrift} sat (nach Gebühr der Mint)`, 'geld-ergebnis online');
-    } else if (!eigen) {
-      zeile(art === 'nicht-bezahlt' ? 'Du hast nicht rechtzeitig bezahlt. Die Partie hat nicht begonnen, es ist kein Geld geflossen.'
-        : 'Du hattest keinen Einsatz gesperrt, es ist kein Geld geflossen.', 'geld-ergebnis');
-    } else if (art === 'nicht-bezahlt') {
-      zeile(`Gegner hat nicht bezahlt, dein Einsatz ${fertig ? 'ist zurück' : 'kommt zurück'} (${gutschrift} sat nach Gebühr der Mint).`, 'geld-ergebnis');
-    } else if (art === 'annulliert') {
-      zeile(`Partie annulliert, dein Einsatz ${fertig ? 'ist zurück' : 'kommt zurück'} (${gutschrift} sat nach Gebühr der Mint).`, 'geld-ergebnis');
-    } else {
-      zeile(`Remis: dein Einsatz ${fertig ? 'ist zurück' : 'kommt zurück'} (${gutschrift} sat nach Gebühr der Mint).`, 'geld-ergebnis');
-    }
+    const g = geld(p);
+    if (!f) { zeile(g.text); return; }
+    const { recht, fertig } = g;
+    zeile(g.text, g.ausgang === 'gewonnen' ? 'geld-ergebnis online' : 'geld-ergebnis');
     // Stand des Einlösens je Einsatz
     for (const e of recht[f]) {
       const a = st.antraege?.[e.farbe] ?? {};
@@ -243,11 +231,68 @@ export function starteEinsatz(ctx) {
       zeile(`Gibt der Schiri nicht frei, kannst du deinen Einsatz ab ${datum(meins.locktime + 1)} allein zurückholen.`, 'muted');
     }
   }
+  // Geld nach dem verbindlichen ergebnis aus der Sicht der Seite: `text` (für #einsatz-info),
+  // `betrag` und `zusatz` (kurz, für den Ergebnis-Kasten), `ausgang` (gewonnen, verloren, zurueck,
+  // ohne), dazu Anspruch und Stand des Einlösens. Die Rückgabe heißt je Art richtig: Remis, Abbruch,
+  // Annullierung oder nicht bezahlt.
+  function geld(p) {
+    const f = farbe(p), betrag = p.einsatz.betrag;
+    const { art, verlierer } = p.ergebnis.c;
+    const recht = anspruch(p) ?? { w: [], b: [] };
+    if (!f) {
+      const text = MIT_VERLIERER.includes(art) ? `${FARBE[verlierer === 'w' ? 'b' : 'w']} bekommt den Topf.` : 'Jeder bekommt seinen eigenen Einsatz zurück.';
+      return { text, betrag: text, ausgang: 'ohne', recht, fertig: true };
+    }
+    const st = lade(p.g);
+    const eigen = !!p.einsaetze[f];
+    const gutschrift = recht[f].reduce((s, e) => s + (st.antraege?.[e.farbe]?.betrag ?? (e.summe - e.gebuehr)), 0);
+    const fertig = !!st.fertig;
+    const r = { recht, fertig, st, f };
+    if (MIT_VERLIERER.includes(art)) {
+      if (verlierer === f) return { ...r, ausgang: 'verloren', text: eigen ? `Verloren: −${betrag} sat` : 'Verloren.', betrag: eigen ? `−${betrag} sat` : 'Kein Geld geflossen.' };
+      return { ...r, ausgang: 'gewonnen', text: `Gewonnen: +${gutschrift} sat (nach Gebühr der Mint)`, betrag: `+${gutschrift} sat`, zusatz: '(nach Gebühr der Mint)' };
+    }
+    if (!eigen) {
+      const text = art === 'nicht-bezahlt' ? 'Du hast nicht rechtzeitig bezahlt. Die Partie hat nicht begonnen, es ist kein Geld geflossen.'
+        : 'Du hattest keinen Einsatz gesperrt, es ist kein Geld geflossen.';
+      return { ...r, ausgang: 'ohne', text, betrag: 'Kein Geld geflossen.' };
+    }
+    const anlass = ANLASS[art] ?? 'Partie beendet';
+    return { ...r, ausgang: 'zurueck', text: `${anlass}: dein Einsatz ${fertig ? 'ist zurück' : 'kommt zurück'} (${gutschrift} sat nach Gebühr der Mint).`,
+      betrag: `Einsatz zurück: ${gutschrift} sat`, zusatz: `(${anlass}, nach Gebühr der Mint)` };
+  }
+
+  // Geld im Ergebnis-Kasten (index.html): Betrag und Stand des Einlösens, jede Sekunde neu
+  function zeichneKasten(ziel, p) {
+    const box = el('div');
+    kasten(box, p);
+    ziel.classList.toggle('versteckt', !box.childNodes.length);
+    const schluessel = box.innerHTML;
+    if (ziel.dataset.inhalt === schluessel) return;
+    ziel.dataset.inhalt = schluessel;
+    ziel.replaceChildren(...box.childNodes);
+  }
+  function kasten(box, p) {
+    if (!p?.einsatz || !p.ende) return;
+    if (!p.ergebnis) { box.append(el('div', { class: 'muted' }, 'Geld: wartet auf das Ergebnis des Schiris.')); return; }
+    const g = geld(p);
+    box.append(el('div', { class: 'betrag' + (g.ausgang === 'gewonnen' ? ' online' : g.ausgang === 'verloren' ? ' warn' : '') }, g.betrag));
+    if (g.zusatz) box.append(el('div', { class: 'muted' }, g.zusatz));
+    if (!g.f || !g.recht[g.f].length) return;
+    // Stand des Einlösens über alle Einsätze, die mir zustehen
+    const a = g.recht[g.f].map((e) => g.st.antraege?.[e.farbe] ?? {});
+    const stand = a.every((x) => x.eingeloest) ? ['eingelöst', 'online']
+      : a.every((x) => x.eingeloest || x.uebersprungen) ? ['erledigt (Einsatz zurückgeholt)', 'online']
+        : a.some((x) => x.aufgegeben) ? ['Einlösen gescheitert, siehe unter dem Brett', 'warn']
+          : ['wird eingelöst …', 'muted'];
+    box.append(el('div', { class: 'einloese-stand ' + stand[1] }, stand[0]));
+  }
+
   function rueckholung(zeile, url, g, grund) {
     const d = zeile(`${grund} Du kannst deinen Einsatz jetzt allein zurückholen.`, 'hinweis');
     d.append(' ', el('button', { class: 'primaer', id: 'btn-zurueckholen', disabled: !W.darfGeldBewegen() || !W.kannSignieren(),
       onclick: () => W.holeZurueck(url, g) }, 'Zurückholen'));
   }
 
-  return { schluessel, neuesEvent, eigenePartien, takt, zeichne, stand: lade };
+  return { schluessel, neuesEvent, eigenePartien, takt, zeichne, zeichneKasten, stand: lade };
 }
