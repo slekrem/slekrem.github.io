@@ -544,7 +544,7 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
   // --- Auszahlen ------------------------------------------------------------------------------
   const gebuehrText = (v) => `Lightning-Gebühr höchstens ${v.gebuehr} sat (fee_reserve der Mint)`
     + (v.inputGebuehr ? `, Tauschgebühr der Mint ${v.inputGebuehr} sat` : '') + `; zusammen höchstens ${v.gesamt} sat. `
-    + 'Was von der Gebühr übrig bleibt, kommt als Wechselgeld zurück.';
+    + 'Was von der Gebühr nicht gebraucht wird, bleibt im Guthaben.';
   $('#w-aus-pruefen').onclick = () => aktion(async () => {
     const url = $('#w-aus-mint').value, ziel = $('#w-aus-ziel').value.trim();
     if (!ziel) throw new Error('Bitte eine BOLT11-Rechnung oder eine Lightning-Adresse eingeben.');
@@ -554,7 +554,7 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
       if (!betrag) throw new Error('Bei einer Lightning-Adresse bitte den Betrag in sat angeben.');
       v = await wallet.auszahlungVorbereiten(url, { adresse: ziel, betrag });
     } else v = await wallet.auszahlungVorbereiten(url, { rechnung: ziel.replace(/^lightning:/i, '') });
-    auszahlung = { url, v };
+    auszahlung = { url, v, adresse: ziel.includes('@') ? ziel : null };
     $('#w-aus-info').textContent = `Auszahlen von ${mintName(url)}: ${v.betrag} sat${ziel.includes('@') ? ` an ${ziel}` : ''}. `
       + (v.beschreibung ? `Beschreibung der Rechnung: „${v.beschreibung}“. ` : '') + gebuehrText(v);
     $('#w-aus-bestaetigen').classList.remove('versteckt');
@@ -562,13 +562,15 @@ export function starteWallet({ kasten, aufAenderung = () => {} }) {
   $('#w-aus-abbrechen').onclick = () => { auszahlung = null; $('#w-aus-bestaetigen').classList.add('versteckt'); };
   $('#w-aus-los').onclick = () => aktion(async () => {
     if (!auszahlung) return;
-    const { url, v } = auszahlung;
+    const { url, v, adresse } = auszahlung;
     auszahlung = null;
     $('#w-aus-bestaetigen').classList.add('versteckt');
     const r = await wallet.auszahlen(url, v);
     if (r.status === 'bezahlt') {
       $('#w-aus-ziel').value = ''; $('#w-aus-betrag').value = '';
-      meldung(`Bezahlt: ${r.betrag} sat, Gebühr ${r.gebuehr} sat, Wechselgeld ${r.wechselgeld} sat zurück.`, 'ok');
+      // Nur Betrag und tatsächliche Gebühr: Das Wechselgeld der Mint ist meist der Rest aus dem
+      // Aufteilen größerer Proofs und bleibt ohnehin im Guthaben
+      meldung(`Bezahlt: ${r.betrag} sat${adresse ? ` an ${adresse}` : ''}, Gebühr ${r.gebuehr} sat.`, 'ok');
     } else meldung('Die Mint bezahlt die Rechnung noch. Das Ergebnis klärt die Seite beim nächsten Laden.', 'warn');
   });
 
